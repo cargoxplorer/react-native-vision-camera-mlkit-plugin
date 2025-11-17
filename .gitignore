@@ -1,0 +1,47 @@
+# OSX
+.DS_Store
+
+# Node
+node_modules/
+npm-debug.log
+yarn-error.log
+
+# Build
+lib/
+dist/
+*.tgz
+
+# Android
+android/build/
+android/.gradle/
+android/app/build/
+android/local.properties
+*.iml
+.idea/
+.gradle/
+
+# iOS
+ios/build/
+ios/Pods/
+*.xcworkspace
+!default.xcworkspace
+xcuserdata/
+*.xcuserstate
+
+# Expo
+.expo/
+.expo-shared/
+
+# Coverage
+coverage/
+.nyc_output/
+
+# IDEs
+.vscode/
+.idea/
+
+# Misc
+.env
+.env.local
+.env.*.local
+*.log
