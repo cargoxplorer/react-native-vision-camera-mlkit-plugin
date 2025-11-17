@@ -1,5 +1,5 @@
 buildscript {
-  ext.kotlin_version = '1.9.25'
+  ext.kotlin_version = '2.1.20'
   repositories {
     google()
     mavenCentral()
@@ -18,11 +18,11 @@ def safeExtGet(prop, fallback) {
 
 android {
   namespace "com.rnvisioncameramlkit"
-  compileSdkVersion safeExtGet('compileSdkVersion', 34)
+  compileSdkVersion safeExtGet('compileSdkVersion', 36)
 
   defaultConfig {
     minSdkVersion safeExtGet('minSdkVersion', 21)
-    targetSdkVersion safeExtGet('targetSdkVersion', 34)
+    targetSdkVersion safeExtGet('targetSdkVersion', 36)
     versionCode 1
     versionName "0.1.0"
   }
