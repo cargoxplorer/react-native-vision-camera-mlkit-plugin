@@ -9,6 +9,7 @@ import {
 import {
   Camera,
   useCameraDevice,
+  useCameraFormat,
   useFrameProcessor,
   runAtTargetFps,
 } from 'react-native-vision-camera';
@@ -23,14 +24,20 @@ export default function BarcodeScannerScreen() {
   const [hasPermission, setHasPermission] = useState(false);
   const [barcodes, setBarcodes] = useState<Barcode[]>([]);
   const [filterQROnly, setFilterQROnly] = useState(false);
+  const [detectInverted, setDetectInverted] = useState(false);
   const [isActive, setIsActive] = useState(true);
 
   const device = useCameraDevice('back');
+  const format = useCameraFormat(
+    device,
+    React.useMemo(() => [{ photoHdr: true }, { videoHdr: true }], [])
+  );
   const barcodeOptions = React.useMemo(
     () => ({
       formats: filterQROnly ? [BarcodeFormat.QR_CODE] : undefined,
+      detectInvertedBarcodes: detectInverted,
     }),
-    [filterQROnly]
+    [filterQROnly, detectInverted]
   );
   const { scanBarcode } = useBarcodeScanner(barcodeOptions);
 
@@ -62,6 +69,8 @@ export default function BarcodeScannerScreen() {
       runAtTargetFps(3, () => {
         'worklet';
         const result = scanBarcode(frame);
+        // Always notify JS, even when no barcodes were found, so UI can clear
+        // old results and react to changes correctly.
         if (result?.barcodes && result.barcodes.length > 0) {
           onBarcodesDetected(result.barcodes);
         }
@@ -93,6 +102,9 @@ export default function BarcodeScannerScreen() {
           style={StyleSheet.absoluteFill}
           device={device}
           isActive={isActive}
+          format={format}
+          videoHdr={format?.supportsVideoHdr ?? false}
+          photoHdr={format?.supportsPhotoHdr ?? false}
           frameProcessor={frameProcessor}
           pixelFormat="yuv"
         />
@@ -127,6 +139,23 @@ export default function BarcodeScannerScreen() {
             ]}
           >
             {filterQROnly ? 'QR Only ✓' : 'All Formats'}
+          </Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[
+            styles.filterButton,
+            detectInverted && styles.filterButtonActive,
+          ]}
+          onPress={() => setDetectInverted(!detectInverted)}
+        >
+          <Text
+            style={[
+              styles.filterButtonText,
+              detectInverted && styles.filterButtonTextActive,
+            ]}
+          >
+            {detectInverted ? 'Inverted ✓' : 'Normal Only'}
           </Text>
         </TouchableOpacity>
       </View>

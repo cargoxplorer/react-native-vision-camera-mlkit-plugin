@@ -9,6 +9,7 @@ import {
 import {
   Camera,
   useCameraDevice,
+  useCameraFormat,
   useFrameProcessor,
   runAtTargetFps,
 } from 'react-native-vision-camera';
@@ -28,6 +29,10 @@ export default function TextRecognitionScreen() {
   const [isActive, setIsActive] = useState(true);
 
   const device = useCameraDevice('back');
+  const format = useCameraFormat(
+    device,
+    React.useMemo(() => [{ photoHdr: true }, { videoHdr: true }], [])
+  );
   // Memoize options so the plugin isn't recreated on every render
   const textOptions = React.useMemo(() => ({ language }), [language]);
   const { scanText } = useTextRecognition(textOptions);
@@ -94,9 +99,10 @@ export default function TextRecognitionScreen() {
           style={StyleSheet.absoluteFill}
           device={device}
           isActive={isActive}
+          format={format}
+          videoHdr={format?.supportsVideoHdr ?? false}
+          photoHdr={format?.supportsPhotoHdr ?? false}
           frameProcessor={frameProcessor}
-          // Limit how often the frame processor runs to reduce OCR load
-          frameProcessorFps={5}
           pixelFormat="yuv"
         />
 

@@ -18,7 +18,7 @@ object Logger {
   }
 
   @Volatile
-  private var currentLogLevel: LogLevel = LogLevel.WARN
+  private var currentLogLevel: LogLevel = LogLevel.DEBUG
 
   /**
    * Set the current log level. Logs below this level will be ignored.

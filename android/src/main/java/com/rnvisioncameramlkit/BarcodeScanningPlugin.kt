@@ -29,23 +29,39 @@ class BarcodeScanningPlugin(
 ) : FrameProcessorPlugin() {
 
     private var scanner: BarcodeScanner
+    private var detectInvertedBarcodes: Boolean = false
 
     init {
         Logger.info("Initializing barcode scanner")
 
+        // Extract options
+        detectInvertedBarcodes = options?.get("detectInvertedBarcodes") as? Boolean ?: false
+        if (detectInvertedBarcodes) {
+            Logger.info("Inverted barcode detection enabled")
+        }
+
         val formats = options?.get("formats") as? List<*>
         val scannerOptions = if (formats != null && formats.isNotEmpty()) {
+            Logger.debug("Parsing ${formats.size} barcode format(s) from options: $formats")
+
             val barcodeFormats = formats.mapNotNull { formatString ->
-                parseBarcodeFormat(formatString.toString())
+                val formatStr = formatString.toString()
+                val parsedFormat = parseBarcodeFormat(formatStr)
+                if (parsedFormat == null) {
+                    Logger.error("FAILED to parse barcode format: '$formatStr'")
+                } else {
+                    Logger.debug("Successfully parsed format: '$formatStr' -> format code: $parsedFormat")
+                }
+                parsedFormat
             }
 
             if (barcodeFormats.isEmpty()) {
-                Logger.warn("No valid barcode formats specified, scanning all formats")
+                Logger.error("No valid barcode formats could be parsed! Original formats: $formats. Falling back to FORMAT_ALL_FORMATS")
                 BarcodeScannerOptions.Builder()
                     .setBarcodeFormats(Barcode.FORMAT_ALL_FORMATS)
                     .build()
             } else {
-                Logger.info("Scanning specific formats: $formats")
+                Logger.info("Scanning ${barcodeFormats.size} barcode format(s): ${barcodeFormats.map { it }}")
                 BarcodeScannerOptions.Builder()
                     .setBarcodeFormats(
                         barcodeFormats.first(),
@@ -54,7 +70,7 @@ class BarcodeScanningPlugin(
                     .build()
             }
         } else {
-            Logger.info("Scanning all barcode formats")
+            Logger.info("No format filter specified, scanning all barcode formats")
             BarcodeScannerOptions.Builder()
                 .setBarcodeFormats(Barcode.FORMAT_ALL_FORMATS)
                 .build()
@@ -76,8 +92,30 @@ class BarcodeScanningPlugin(
 
             Logger.debug("Processing frame: ${frame.width}x${frame.height}, rotation: ${frame.imageProxy.imageInfo.rotationDegrees}")
 
+            // Scan normal image first
             val task: Task<List<Barcode>> = scanner.process(image)
-            val barcodes: List<Barcode> = Tasks.await(task)
+            var barcodes: List<Barcode> = Tasks.await(task)
+
+            // If no barcodes found and inverted detection is enabled, try inverted image
+            if (barcodes.isEmpty() && detectInvertedBarcodes) {
+                Logger.debug("No barcodes in normal image, attempting inverted image scan...")
+
+                val startInvertTime = System.currentTimeMillis()
+                val invertedImage = createInvertedImage(mediaImage, frame.imageProxy.imageInfo.rotationDegrees)
+
+                if (invertedImage != null) {
+                    val invertedTask: Task<List<Barcode>> = scanner.process(invertedImage)
+                    val invertedBarcodes: List<Barcode> = Tasks.await(invertedTask)
+
+                    val invertTime = System.currentTimeMillis() - startInvertTime
+                    Logger.performance("Inverted image scan", invertTime)
+
+                    if (invertedBarcodes.isNotEmpty()) {
+                        Logger.debug("Found ${invertedBarcodes.size} barcode(s) in inverted image")
+                        barcodes = invertedBarcodes
+                    }
+                }
+            }
 
             val processingTime = System.currentTimeMillis() - startTime
             Logger.performance("Barcode scanning processing", processingTime)
@@ -144,9 +182,9 @@ class BarcodeScanningPlugin(
                 Barcode.FORMAT_UPC_A -> "upca"
                 Barcode.FORMAT_UPC_E -> "upce"
                 Barcode.FORMAT_AZTEC -> "aztec"
-                Barcode.FORMAT_DATA_MATRIX -> "dataMatrix"
+                Barcode.FORMAT_DATA_MATRIX -> "datamatrix"
                 Barcode.FORMAT_PDF417 -> "pdf417"
-                Barcode.FORMAT_QR_CODE -> "qrCode"
+                Barcode.FORMAT_QR_CODE -> "qrcode"
                 else -> "unknown"
             }
         }
@@ -352,6 +390,103 @@ class BarcodeScanningPlugin(
             }
 
             return pointsArray
+        }
+
+        /**
+         * Create an inverted version of the image for detecting white-on-black barcodes
+         * Inverts the Y plane pixels (for YUV_420_888 format)
+         * Returns InputImage for ML Kit processing, or null if inversion fails
+         *
+         * Critical: We MUST create a new image because ML Kit reads the image data
+         * at processing time, so modifying buffers in-place doesn't work.
+         * Solution: Convert inverted YUV to RGB Bitmap that ML Kit can process.
+         */
+        private fun createInvertedImage(mediaImage: Image, rotationDegrees: Int): InputImage? {
+            return try {
+                val width = mediaImage.width
+                val height = mediaImage.height
+
+                // Extract YUV planes
+                val yPlane = mediaImage.planes[0]
+                val uPlane = mediaImage.planes[1]
+                val vPlane = mediaImage.planes[2]
+
+                // Copy Y plane and invert it
+                val ySize = yPlane.buffer.limit()
+                val yData = ByteArray(ySize)
+                yPlane.buffer.rewind()
+                yPlane.buffer.get(yData)
+
+                // INVERT ONLY Y PLANE: brightness (0->255, 255->0)
+                for (i in yData.indices) {
+                    yData[i] = (255 - (yData[i].toInt() and 0xFF)).toByte()
+                }
+
+                // Copy U and V planes (color info - don't invert)
+                val uSize = uPlane.buffer.limit()
+                val uData = ByteArray(uSize)
+                uPlane.buffer.rewind()
+                uPlane.buffer.get(uData)
+
+                val vSize = vPlane.buffer.limit()
+                val vData = ByteArray(vSize)
+                vPlane.buffer.rewind()
+                vPlane.buffer.get(vData)
+
+                Logger.debug("Created inverted image: ${width}x${height}, Y plane inverted")
+
+                // Convert inverted YUV to RGB Bitmap for ML Kit
+                val invertedBitmap = yuvToRgbBitmap(width, height, yData, uData, vData)
+
+                // Create InputImage from Bitmap with rotation
+                InputImage.fromBitmap(invertedBitmap, rotationDegrees)
+            } catch (e: Exception) {
+                Logger.error("Failed to create inverted image", e)
+                null
+            }
+        }
+
+        /**
+         * Convert YUV420 plane data to RGB Bitmap for ML Kit processing
+         * Uses efficient YUV to RGB conversion optimized for barcode detection
+         */
+        private fun yuvToRgbBitmap(
+            width: Int,
+            height: Int,
+            yData: ByteArray,
+            uData: ByteArray,
+            vData: ByteArray
+        ): android.graphics.Bitmap {
+            val rgb = IntArray(width * height)
+
+            // YUV to RGB conversion
+            // For barcode detection, we prioritize accuracy over color fidelity
+            var yIndex = 0
+            var uvIndex = 0
+
+            for (y in 0 until height) {
+                for (x in 0 until width) {
+                    // Get Y value (brightness)
+                    val yVal = (yData[yIndex].toInt() and 0xFF)
+                    yIndex++
+
+                    // Get U and V values (color) - sampled every 2x2 pixels in YUV420
+                    val uvPixelIndex = (y / 2) * (width / 2) + (x / 2)
+                    val uVal = (uData[uvPixelIndex].toInt() and 0xFF) - 128
+                    val vVal = (vData[uvPixelIndex].toInt() and 0xFF) - 128
+
+                    // YUV to RGB formula
+                    val r = (yVal + 1.370f * vVal).coerceIn(0f, 255f).toInt()
+                    val g = (yVal - 0.343f * uVal - 0.711f * vVal).coerceIn(0f, 255f).toInt()
+                    val b = (yVal + 1.732f * uVal).coerceIn(0f, 255f).toInt()
+
+                    rgb[y * width + x] = android.graphics.Color.rgb(r, g, b)
+                }
+            }
+
+            val bitmap = android.graphics.Bitmap.createBitmap(width, height, android.graphics.Bitmap.Config.RGB_565)
+            bitmap.setPixels(rgb, 0, width, 0, 0, width, height)
+            return bitmap
         }
     }
 }

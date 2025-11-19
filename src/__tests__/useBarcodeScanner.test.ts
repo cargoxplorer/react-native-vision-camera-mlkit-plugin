@@ -52,7 +52,7 @@ describe('useBarcodeScanner', () => {
 
     expect(mockVisionCameraProxy.initFrameProcessorPlugin).toHaveBeenCalledWith(
       'scanBarcode',
-      { formats: ['qrCode'] }
+      { formats: ['qrcode'] }
     );
   });
 
@@ -85,6 +85,24 @@ describe('useBarcodeScanner', () => {
   it('should recreate plugin when options change', () => {
     const options1 = { formats: [BarcodeFormat.QR_CODE] };
     const options2 = { formats: [BarcodeFormat.EAN_13] };
+
+    useBarcodeScanner(options1);
+    expect(mockVisionCameraProxy.initFrameProcessorPlugin).toHaveBeenCalledTimes(
+      1
+    );
+
+    // Reset memoization
+    mockMemoState.mockLastDeps = [];
+
+    useBarcodeScanner(options2);
+    expect(mockVisionCameraProxy.initFrameProcessorPlugin).toHaveBeenCalledTimes(
+      2
+    );
+  });
+
+  it('should recreate plugin when detectInvertedBarcodes changes', () => {
+    const options1 = { detectInvertedBarcodes: false };
+    const options2 = { detectInvertedBarcodes: true };
 
     useBarcodeScanner(options1);
     expect(mockVisionCameraProxy.initFrameProcessorPlugin).toHaveBeenCalledTimes(

@@ -226,9 +226,9 @@ export enum BarcodeFormat {
 
   // 2D formats
   AZTEC = 'aztec',
-  DATA_MATRIX = 'dataMatrix',
+  DATA_MATRIX = 'datamatrix',
   PDF417 = 'pdf417',
-  QR_CODE = 'qrCode',
+  QR_CODE = 'qrcode',
 
   // Unknown
   UNKNOWN = 'unknown',
@@ -311,6 +311,14 @@ export interface BarcodeScanningOptions {
    * If not specified, all formats are scanned
    */
   formats?: BarcodeFormat[];
+
+  /**
+   * Enable detection of inverted barcodes (white bars on black background)
+   * If enabled and no barcodes found in normal image, scans an inverted version
+   * Only inverts image if first scan returns no results (minimal performance impact)
+   * @default false
+   */
+  detectInvertedBarcodes?: boolean;
 }
 
 /**

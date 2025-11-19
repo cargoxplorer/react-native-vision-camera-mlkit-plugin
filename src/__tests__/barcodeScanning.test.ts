@@ -42,7 +42,7 @@ describe('createBarcodeScannerPlugin', () => {
 
       expect(mockVisionCameraProxy.initFrameProcessorPlugin).toHaveBeenCalledWith(
         'scanBarcode',
-        { formats: ['qrCode', 'ean13'] }
+        { formats: ['qrcode', 'ean13'] }
       );
     });
 
@@ -53,7 +53,7 @@ describe('createBarcodeScannerPlugin', () => {
 
       expect(mockVisionCameraProxy.initFrameProcessorPlugin).toHaveBeenCalledWith(
         'scanBarcode',
-        { formats: ['qrCode'] }
+        { formats: ['qrcode'] }
       );
     });
 
@@ -102,7 +102,7 @@ describe('createBarcodeScannerPlugin', () => {
 
       expect(mockVisionCameraProxy.initFrameProcessorPlugin).toHaveBeenCalledWith(
         'scanBarcode',
-        { formats: ['aztec', 'dataMatrix', 'pdf417', 'qrCode'] }
+        { formats: ['aztec', 'datamatrix', 'pdf417', 'qrcode'] }
       );
     });
   });
@@ -139,7 +139,7 @@ describe('createBarcodeScannerPlugin', () => {
           {
             rawValue: 'https://example.com',
             displayValue: 'https://example.com',
-            format: 'qrCode',
+            format: 'qrcode',
             valueType: 'url',
           },
         ],
@@ -187,7 +187,7 @@ describe('createBarcodeScannerPlugin', () => {
           {
             rawValue: 'https://example.com',
             displayValue: 'https://example.com',
-            format: 'qrCode',
+            format: 'qrcode',
             valueType: 'url',
             frame: { x: 100, y: 200, width: 300, height: 300 },
             cornerPoints: [
@@ -249,7 +249,7 @@ describe('createBarcodeScannerPlugin', () => {
           {
             rawValue: 'WIFI:S:MyNetwork;T:WPA;P:password123;;',
             displayValue: 'WiFi Network',
-            format: 'qrCode',
+            format: 'qrcode',
             valueType: 'wifi',
             wifi: {
               ssid: 'MyNetwork',
@@ -278,7 +278,7 @@ describe('createBarcodeScannerPlugin', () => {
           {
             rawValue: 'BEGIN:VCARD...',
             displayValue: 'John Doe',
-            format: 'qrCode',
+            format: 'qrcode',
             valueType: 'contact',
             contact: {
               name: 'John Doe',
@@ -296,6 +296,66 @@ describe('createBarcodeScannerPlugin', () => {
 
       expect(result?.barcodes[0].valueType).toBe('contact');
       expect(result?.barcodes[0].contact?.name).toBe('John Doe');
+    });
+  });
+
+  describe('inverted barcode detection', () => {
+    it('should pass detectInvertedBarcodes option to native', () => {
+      createBarcodeScannerPlugin({
+        detectInvertedBarcodes: true,
+      });
+
+      expect(mockVisionCameraProxy.initFrameProcessorPlugin).toHaveBeenCalledWith(
+        'scanBarcode',
+        { detectInvertedBarcodes: true }
+      );
+    });
+
+    it('should handle detectInvertedBarcodes with formats', () => {
+      createBarcodeScannerPlugin({
+        formats: [BarcodeFormat.QR_CODE],
+        detectInvertedBarcodes: true,
+      });
+
+      expect(mockVisionCameraProxy.initFrameProcessorPlugin).toHaveBeenCalledWith(
+        'scanBarcode',
+        { formats: ['qrcode'], detectInvertedBarcodes: true }
+      );
+    });
+
+    it('should default detectInvertedBarcodes to false', () => {
+      createBarcodeScannerPlugin();
+
+      expect(mockVisionCameraProxy.initFrameProcessorPlugin).toHaveBeenCalledWith(
+        'scanBarcode',
+        {}
+      );
+    });
+
+    it('should detect inverted barcode results', () => {
+      const plugin = createBarcodeScannerPlugin({
+        detectInvertedBarcodes: true,
+      });
+      const mockFrame = { width: 1920, height: 1080 } as any;
+
+      const mockResult = {
+        barcodes: [
+          {
+            rawValue: 'https://inverted.example.com',
+            displayValue: 'https://inverted.example.com',
+            format: 'qrcode',
+            valueType: 'url',
+            url: 'https://inverted.example.com',
+          },
+        ],
+      };
+
+      mockPlugin.call.mockReturnValue(mockResult);
+
+      const result = plugin.scanBarcode(mockFrame);
+
+      expect(result).toEqual(mockResult);
+      expect(result?.barcodes[0].url).toBe('https://inverted.example.com');
     });
   });
 });

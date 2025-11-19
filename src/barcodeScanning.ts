@@ -86,8 +86,12 @@ export function createBarcodeScannerPlugin(
         const result = plugin.call(frame) as unknown as BarcodeScanningResult | null;
         return result;
       } catch (e) {
-        // If the native plugin throws, return null instead of propagating
-        // an error from the worklet context.
+        // Log the error so developers can debug issues
+        console.error(
+          '[react-native-vision-camera-ml-kit] Barcode scanning error:',
+          e instanceof Error ? e.message : String(e)
+        );
+        // Return null instead of propagating an error from the worklet context
         return null;
       }
     },
@@ -126,8 +130,15 @@ export function createBarcodeScannerPlugin(
 export function useBarcodeScanner(
   options?: BarcodeScanningOptions
 ): BarcodeScanningPlugin {
+  // Extract individual options to stable dependencies
+  // This prevents unnecessary re-creation when options object reference changes
+  // but the actual option values remain the same
+  const formats = options?.formats;
+  const detectInvertedBarcodes = options?.detectInvertedBarcodes;
+
   return useMemo(
     () => createBarcodeScannerPlugin(options),
-    [options]
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [formats, detectInvertedBarcodes]
   );
 }
