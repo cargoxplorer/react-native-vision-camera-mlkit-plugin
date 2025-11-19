@@ -85,9 +85,14 @@
     "react-native-vision-camera": "^4.0.0",
     "react-native-worklets-core": "^1.0.0"
   },
-  "workspaces": [
-    "example"
-  ], 
+  "workspaces": {
+    "packages": [
+      "example"
+    ],
+    "nohoist": [
+      "example/**"
+    ]
+  }, 
   "engines": {
     "node": ">=20.19.4"
   },
