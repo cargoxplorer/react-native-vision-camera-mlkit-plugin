@@ -30,6 +30,11 @@ class BarcodeScanningPlugin(
 
     private var scanner: BarcodeScanner
     private var detectInvertedBarcodes: Boolean = false
+    // Reusable buffers to avoid per-frame allocations during inversion
+    private var invertedYBuffer: ByteArray? = null
+    private var invertedUBuffer: ByteArray? = null
+    private var invertedVBuffer: ByteArray? = null
+    private var rgbIntBuffer: IntArray? = null
 
     init {
         Logger.info("Initializing barcode scanner")
@@ -85,43 +90,76 @@ class BarcodeScanningPlugin(
 
         try {
             val mediaImage: Image = frame.image
-            val image = InputImage.fromMediaImage(
-                mediaImage,
-                frame.imageProxy.imageInfo.rotationDegrees
-            )
+            val baseRotation = frame.imageProxy.imageInfo.rotationDegrees
 
-            Logger.debug("Processing frame: ${frame.width}x${frame.height}, rotation: ${frame.imageProxy.imageInfo.rotationDegrees}")
+            Logger.debug("Processing frame: ${frame.width}x${frame.height}, rotation: $baseRotation")
 
-            // Scan normal image first
+            // Try scanning at current rotation and 90 degree rotation
+            val rotations = listOf(baseRotation, (baseRotation + 90) % 360)
+            var barcodes: List<Barcode> = emptyList()
+
+            // 1. Try normal image at current rotation
+            val image = InputImage.fromMediaImage(mediaImage, rotations[0])
             val task: Task<List<Barcode>> = scanner.process(image)
-            var barcodes: List<Barcode> = Tasks.await(task)
+            barcodes = Tasks.await(task)
 
-            // If no barcodes found and inverted detection is enabled, try inverted image
+            if (barcodes.isNotEmpty()) {
+                Logger.debug("Found ${barcodes.size} barcode(s) at rotation ${rotations[0]}")
+            } else {
+                // 2. Try normal image at 90 degree rotation
+                Logger.debug("No barcodes at rotation ${rotations[0]}, trying ${rotations[1]}")
+                val image90 = InputImage.fromMediaImage(mediaImage, rotations[1])
+                val task90: Task<List<Barcode>> = scanner.process(image90)
+                barcodes = Tasks.await(task90)
+
+                if (barcodes.isNotEmpty()) {
+                    Logger.debug("Found ${barcodes.size} barcode(s) at rotation ${rotations[1]}")
+                }
+            }
+
+            // 3. If no barcodes found and inverted detection is enabled, try inverted images
             if (barcodes.isEmpty() && detectInvertedBarcodes) {
                 Logger.debug("No barcodes in normal image, attempting inverted image scan...")
 
                 val startInvertTime = System.currentTimeMillis()
-                val invertedImage = createInvertedImage(mediaImage, frame.imageProxy.imageInfo.rotationDegrees)
 
-                if (invertedImage != null) {
+                // Create a single inverted Bitmap and reuse it for both rotations
+                val invertedBitmap = createInvertedBitmap(mediaImage)
+
+                if (invertedBitmap != null) {
+                    // Try inverted at current rotation
+                    val invertedImage = InputImage.fromBitmap(invertedBitmap, rotations[0])
                     val invertedTask: Task<List<Barcode>> = scanner.process(invertedImage)
-                    val invertedBarcodes: List<Barcode> = Tasks.await(invertedTask)
+                    barcodes = Tasks.await(invertedTask)
 
-                    val invertTime = System.currentTimeMillis() - startInvertTime
-                    Logger.performance("Inverted image scan", invertTime)
+                    if (barcodes.isNotEmpty()) {
+                        Logger.debug("Found ${barcodes.size} barcode(s) in inverted image at rotation ${rotations[0]}")
+                    } else {
+                        // Try inverted at 90 degree rotation
+                        Logger.debug("No barcodes in inverted at ${rotations[0]}, trying ${rotations[1]}")
 
-                    if (invertedBarcodes.isNotEmpty()) {
-                        Logger.debug("Found ${invertedBarcodes.size} barcode(s) in inverted image")
-                        barcodes = invertedBarcodes
+                        // Only try second rotation if it's actually different
+                        if (rotations[1] != rotations[0]) {
+                            val invertedImage90 = InputImage.fromBitmap(invertedBitmap, rotations[1])
+                            val invertedTask90: Task<List<Barcode>> = scanner.process(invertedImage90)
+                            barcodes = Tasks.await(invertedTask90)
+
+                            if (barcodes.isNotEmpty()) {
+                                Logger.debug("Found ${barcodes.size} barcode(s) in inverted image at rotation ${rotations[1]}")
+                            }
+                        }
                     }
                 }
+
+                val invertTime = System.currentTimeMillis() - startInvertTime
+                Logger.performance("Inverted image scan (both rotations)", invertTime)
             }
 
             val processingTime = System.currentTimeMillis() - startTime
             Logger.performance("Barcode scanning processing", processingTime)
 
             if (barcodes.isEmpty()) {
-                Logger.debug("No barcodes detected in frame")
+                Logger.debug("No barcodes detected in frame (tried all rotations)")
                 return null
             }
 
@@ -139,6 +177,141 @@ class BarcodeScanningPlugin(
             Logger.performance("Barcode scanning processing (error)", processingTime)
             return null
         }
+    }
+
+    /**
+     * Create an inverted version of the image for detecting white-on-black barcodes.
+     * Inverts the Y plane pixels (for YUV_420_888 format) and converts to an RGB Bitmap.
+     *
+     * Critical: We MUST create a new image because ML Kit reads the image data
+     * at processing time, so modifying buffers in-place doesn't work.
+     * Solution: Convert inverted YUV to RGB Bitmap that ML Kit can process.
+     *
+     * Fixed: Now properly handles YUV plane stride and pixel stride to avoid
+     * crashes and corruption on devices with non-contiguous plane layouts.
+     *
+     * Performance: Uses reusable buffers stored on the plugin instance to avoid
+     * per-frame allocations for Y, U, V and RGB arrays.
+     */
+    private fun createInvertedBitmap(mediaImage: Image): android.graphics.Bitmap? {
+        return try {
+            val width = mediaImage.width
+            val height = mediaImage.height
+
+            // Extract YUV planes with stride information
+            val yPlane = mediaImage.planes[0]
+            val uPlane = mediaImage.planes[1]
+            val vPlane = mediaImage.planes[2]
+
+            val yRowStride = yPlane.rowStride
+            val yPixelStride = yPlane.pixelStride
+            val uvRowStride = uPlane.rowStride
+            val uvPixelStride = uPlane.pixelStride
+
+            // Ensure reusable buffers are allocated with sufficient size
+            val requiredYSize = width * height
+            if (invertedYBuffer == null || invertedYBuffer!!.size < requiredYSize) {
+                invertedYBuffer = ByteArray(requiredYSize)
+            }
+            val yData = invertedYBuffer!!
+
+            val uvHeight = height / 2
+            val uvWidth = width / 2
+            val requiredUvSize = uvWidth * uvHeight
+            if (invertedUBuffer == null || invertedUBuffer!!.size < requiredUvSize) {
+                invertedUBuffer = ByteArray(requiredUvSize)
+            }
+            if (invertedVBuffer == null || invertedVBuffer!!.size < requiredUvSize) {
+                invertedVBuffer = ByteArray(requiredUvSize)
+            }
+            val uData = invertedUBuffer!!
+            val vData = invertedVBuffer!!
+
+            // Copy and invert Y plane respecting stride
+            val yBuffer = yPlane.buffer
+            yBuffer.rewind()
+
+            for (row in 0 until height) {
+                for (col in 0 until width) {
+                    val bufferIndex = row * yRowStride + col * yPixelStride
+                    val arrayIndex = row * width + col
+                    val value = yBuffer.get(bufferIndex).toInt() and 0xFF
+                    // INVERT: brightness (0->255, 255->0)
+                    yData[arrayIndex] = (255 - value).toByte()
+                }
+            }
+
+            // Copy UV planes respecting stride (color info - don't invert)
+            val uBuffer = uPlane.buffer
+            val vBuffer = vPlane.buffer
+            uBuffer.rewind()
+            vBuffer.rewind()
+
+            for (row in 0 until uvHeight) {
+                for (col in 0 until uvWidth) {
+                    val bufferIndex = row * uvRowStride + col * uvPixelStride
+                    val arrayIndex = row * uvWidth + col
+                    uData[arrayIndex] = uBuffer.get(bufferIndex)
+                    vData[arrayIndex] = vBuffer.get(bufferIndex)
+                }
+            }
+
+            Logger.debug("Created inverted bitmap: ${width}x${height}, Y plane inverted (stride-aware, reusable buffers)")
+
+            // Convert inverted YUV to RGB Bitmap for ML Kit
+            yuvToRgbBitmap(width, height, yData, uData, vData)
+        } catch (e: Exception) {
+            Logger.error("Failed to create inverted bitmap", e)
+            null
+        }
+    }
+
+    /**
+     * Convert YUV420 plane data to RGB Bitmap for ML Kit processing.
+     * Uses efficient YUV to RGB conversion optimized for barcode detection.
+     *
+     * Note: Input arrays are stride-normalized (no padding) from createInvertedBitmap.
+     * Uses a reusable RGB int buffer on the plugin instance to avoid per-frame allocations.
+     */
+    private fun yuvToRgbBitmap(
+        width: Int,
+        height: Int,
+        yData: ByteArray,
+        uData: ByteArray,
+        vData: ByteArray
+    ): android.graphics.Bitmap {
+        val requiredSize = width * height
+        if (rgbIntBuffer == null || rgbIntBuffer!!.size < requiredSize) {
+            rgbIntBuffer = IntArray(requiredSize)
+        }
+        val rgb = rgbIntBuffer!!
+        val uvWidth = width / 2
+
+        // YUV to RGB conversion
+        // For barcode detection, we prioritize accuracy over color fidelity
+        for (y in 0 until height) {
+            for (x in 0 until width) {
+                // Get Y value (brightness) - stride-normalized array
+                val yIndex = y * width + x
+                val yVal = (yData[yIndex].toInt() and 0xFF)
+
+                // Get U and V values (color) - sampled every 2x2 pixels in YUV420
+                val uvIndex = (y / 2) * uvWidth + (x / 2)
+                val uVal = (uData[uvIndex].toInt() and 0xFF) - 128
+                val vVal = (vData[uvIndex].toInt() and 0xFF) - 128
+
+                // YUV to RGB formula
+                val r = (yVal + 1.370f * vVal).coerceIn(0f, 255f).toInt()
+                val g = (yVal - 0.343f * uVal - 0.711f * vVal).coerceIn(0f, 255f).toInt()
+                val b = (yVal + 1.732f * uVal).coerceIn(0f, 255f).toInt()
+
+                rgb[y * width + x] = android.graphics.Color.rgb(r, g, b)
+            }
+        }
+
+        val bitmap = android.graphics.Bitmap.createBitmap(width, height, android.graphics.Bitmap.Config.RGB_565)
+        bitmap.setPixels(rgb, 0, width, 0, 0, width, height)
+        return bitmap
     }
 
     companion object {
@@ -392,101 +565,5 @@ class BarcodeScanningPlugin(
             return pointsArray
         }
 
-        /**
-         * Create an inverted version of the image for detecting white-on-black barcodes
-         * Inverts the Y plane pixels (for YUV_420_888 format)
-         * Returns InputImage for ML Kit processing, or null if inversion fails
-         *
-         * Critical: We MUST create a new image because ML Kit reads the image data
-         * at processing time, so modifying buffers in-place doesn't work.
-         * Solution: Convert inverted YUV to RGB Bitmap that ML Kit can process.
-         */
-        private fun createInvertedImage(mediaImage: Image, rotationDegrees: Int): InputImage? {
-            return try {
-                val width = mediaImage.width
-                val height = mediaImage.height
-
-                // Extract YUV planes
-                val yPlane = mediaImage.planes[0]
-                val uPlane = mediaImage.planes[1]
-                val vPlane = mediaImage.planes[2]
-
-                // Copy Y plane and invert it
-                val ySize = yPlane.buffer.limit()
-                val yData = ByteArray(ySize)
-                yPlane.buffer.rewind()
-                yPlane.buffer.get(yData)
-
-                // INVERT ONLY Y PLANE: brightness (0->255, 255->0)
-                for (i in yData.indices) {
-                    yData[i] = (255 - (yData[i].toInt() and 0xFF)).toByte()
-                }
-
-                // Copy U and V planes (color info - don't invert)
-                val uSize = uPlane.buffer.limit()
-                val uData = ByteArray(uSize)
-                uPlane.buffer.rewind()
-                uPlane.buffer.get(uData)
-
-                val vSize = vPlane.buffer.limit()
-                val vData = ByteArray(vSize)
-                vPlane.buffer.rewind()
-                vPlane.buffer.get(vData)
-
-                Logger.debug("Created inverted image: ${width}x${height}, Y plane inverted")
-
-                // Convert inverted YUV to RGB Bitmap for ML Kit
-                val invertedBitmap = yuvToRgbBitmap(width, height, yData, uData, vData)
-
-                // Create InputImage from Bitmap with rotation
-                InputImage.fromBitmap(invertedBitmap, rotationDegrees)
-            } catch (e: Exception) {
-                Logger.error("Failed to create inverted image", e)
-                null
-            }
-        }
-
-        /**
-         * Convert YUV420 plane data to RGB Bitmap for ML Kit processing
-         * Uses efficient YUV to RGB conversion optimized for barcode detection
-         */
-        private fun yuvToRgbBitmap(
-            width: Int,
-            height: Int,
-            yData: ByteArray,
-            uData: ByteArray,
-            vData: ByteArray
-        ): android.graphics.Bitmap {
-            val rgb = IntArray(width * height)
-
-            // YUV to RGB conversion
-            // For barcode detection, we prioritize accuracy over color fidelity
-            var yIndex = 0
-            var uvIndex = 0
-
-            for (y in 0 until height) {
-                for (x in 0 until width) {
-                    // Get Y value (brightness)
-                    val yVal = (yData[yIndex].toInt() and 0xFF)
-                    yIndex++
-
-                    // Get U and V values (color) - sampled every 2x2 pixels in YUV420
-                    val uvPixelIndex = (y / 2) * (width / 2) + (x / 2)
-                    val uVal = (uData[uvPixelIndex].toInt() and 0xFF) - 128
-                    val vVal = (vData[uvPixelIndex].toInt() and 0xFF) - 128
-
-                    // YUV to RGB formula
-                    val r = (yVal + 1.370f * vVal).coerceIn(0f, 255f).toInt()
-                    val g = (yVal - 0.343f * uVal - 0.711f * vVal).coerceIn(0f, 255f).toInt()
-                    val b = (yVal + 1.732f * uVal).coerceIn(0f, 255f).toInt()
-
-                    rgb[y * width + x] = android.graphics.Color.rgb(r, g, b)
-                }
-            }
-
-            val bitmap = android.graphics.Bitmap.createBitmap(width, height, android.graphics.Bitmap.Config.RGB_565)
-            bitmap.setPixels(rgb, 0, width, 0, 0, width, height)
-            return bitmap
-        }
     }
 }
