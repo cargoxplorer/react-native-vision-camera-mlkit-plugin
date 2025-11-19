@@ -19,6 +19,7 @@ import {
   BarcodeFormat,
   type Barcode,
 } from 'react-native-vision-camera-ml-kit';
+import { useAppLifecycle } from './utils/useAppLifecycle';
 
 export default function BarcodeScannerScreen() {
   const [hasPermission, setHasPermission] = useState(false);
@@ -49,6 +50,9 @@ export default function BarcodeScannerScreen() {
       setHasPermission(status === 'granted');
     })();
   }, []);
+
+  // Handle app lifecycle - pause camera when app goes to background
+  useAppLifecycle(setIsActive);
 
   const onBarcodesDetected = Worklets.createRunOnJS((detected: Barcode[]) => {
     // Avoid unnecessary re-renders when barcodes haven't changed

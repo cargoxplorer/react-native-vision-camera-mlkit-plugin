@@ -19,6 +19,7 @@ import {
   TextRecognitionScript,
   type TextRecognitionResult,
 } from 'react-native-vision-camera-ml-kit';
+import { useAppLifecycle } from './utils/useAppLifecycle';
 
 export default function TextRecognitionScreen() {
   const [hasPermission, setHasPermission] = useState(false);
@@ -43,6 +44,9 @@ export default function TextRecognitionScreen() {
       setHasPermission(status === 'granted');
     })();
   }, []);
+
+  // Handle app lifecycle - pause camera when app goes to background
+  useAppLifecycle(setIsActive);
 
   const onTextDetected = Worklets.createRunOnJS(
     (textResult: TextRecognitionResult | null) => {
