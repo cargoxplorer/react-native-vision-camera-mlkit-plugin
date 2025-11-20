@@ -21,10 +21,7 @@
   },
   "github": {
     "release": true,
-    "releaseName": "v${version}",
-    "releaseNotes": null,
-    "preRelease": false,
-    "tokenRef": "GITHUB_TOKEN"
+    "releaseName": "Release v${version}"
   },
   "hooks": {
     "before:init": [],
