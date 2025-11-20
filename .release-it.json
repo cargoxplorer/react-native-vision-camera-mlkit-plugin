@@ -22,7 +22,7 @@
   "github": {
     "release": true,
     "releaseName": "v${version}",
-    "releaseNotes": "echo 'See CHANGELOG.md for details'",
+    "releaseNotes": "See CHANGELOG.md for details",
     "preRelease": false,
     "tokenRef": "GITHUB_TOKEN"
   },
