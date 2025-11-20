@@ -166,7 +166,11 @@ jobs:
         run: |
           cd example/ios
           # Update all targets in the Xcode project to use iOS 15.5
-          sed -i '' 's/IPHONEOS_DEPLOYMENT_TARGET = [0-9]*\.[0-9]*/IPHONEOS_DEPLOYMENT_TARGET = 15.5/g' *.xcodeproj/project.pbxproj
+          ruby -i -pe 'gsub(/IPHONEOS_DEPLOYMENT_TARGET = \d+\.\d+/, "IPHONEOS_DEPLOYMENT_TARGET = 15.5")' *.xcodeproj/project.pbxproj
+          # Also ensure Podfile has correct platform
+          if [ -f "Podfile" ]; then
+            ruby -i -pe 'gsub(/platform :ios, .*$/, "platform :ios, '\''15.5'\''")' Podfile
+          fi
 
       - name: Install CocoaPods dependencies
         run: |
