@@ -26,7 +26,7 @@ jobs:
           cache: 'yarn'
 
       - name: Install dependencies
-        run: yarn install --frozen-lockfile
+        run: yarn install
 
       - name: Run linter
         run: yarn lint
@@ -60,7 +60,7 @@ jobs:
           cache: 'yarn'
 
       - name: Install dependencies
-        run: yarn install --frozen-lockfile
+        run: yarn install
 
       - name: Build library
         run: yarn prepare
@@ -101,7 +101,7 @@ jobs:
           java-version: '17'
 
       - name: Install root dependencies
-        run: yarn install --frozen-lockfile
+        run: yarn install
 
       - name: Build TypeScript library
         run: yarn prepare
@@ -109,7 +109,7 @@ jobs:
       - name: Install example app dependencies
         run: |
           cd example
-          yarn install --frozen-lockfile
+          yarn install
 
       - name: Build Android example app
         run: |
@@ -139,7 +139,7 @@ jobs:
           cache: 'yarn'
 
       - name: Install root dependencies
-        run: yarn install --frozen-lockfile
+        run: yarn install
 
       - name: Build TypeScript library
         run: yarn prepare
@@ -147,7 +147,7 @@ jobs:
       - name: Install example app dependencies
         run: |
           cd example
-          yarn install --frozen-lockfile
+          yarn install
 
       - name: Generate iOS project (Expo prebuild)
         run: |
