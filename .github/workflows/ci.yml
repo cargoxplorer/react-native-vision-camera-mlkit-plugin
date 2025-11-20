@@ -111,6 +111,11 @@ jobs:
           cd example
           yarn install
 
+      - name: Generate Android project (Expo prebuild)
+        run: |
+          cd example
+          npx expo prebuild --platform android --clean
+
       - name: Make gradlew executable
         run: chmod +x example/android/gradlew
 
