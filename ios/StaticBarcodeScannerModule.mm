@@ -12,6 +12,20 @@
 #import <MLKitVision/MLKitVision.h>
 #import <Photos/Photos.h>
 
+// Forward declarations for MLKit barcode types
+@class MLKBarcode;
+@class MLKBarcodeAddress;
+@class MLKBarcodeContactInfo;
+@class MLKBarcodeDriverLicense;
+@class MLKBarcodeEmail;
+@class MLKBarcodeGeoPoint;
+@class MLKBarcodePersonName;
+@class MLKBarcodePhone;
+@class MLKBarcodeSMS;
+@class MLKBarcodeURLBookmark;
+@class MLKBarcodeWiFi;
+@class MLKBarcodeCalendarEvent;
+
 @implementation StaticBarcodeScannerModule
 
 RCT_EXPORT_MODULE()

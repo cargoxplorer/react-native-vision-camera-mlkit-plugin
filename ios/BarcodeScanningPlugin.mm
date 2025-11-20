@@ -11,6 +11,20 @@
 #import <MLKitBarcodeScanning/MLKitBarcodeScanning.h>
 #import <MLKitVision/MLKitVision.h>
 
+// Forward declarations for MLKit barcode types
+@class MLKBarcode;
+@class MLKBarcodeAddress;
+@class MLKBarcodeContactInfo;
+@class MLKBarcodeDriverLicense;
+@class MLKBarcodeEmail;
+@class MLKBarcodeGeoPoint;
+@class MLKBarcodePersonName;
+@class MLKBarcodePhone;
+@class MLKBarcodeSMS;
+@class MLKBarcodeURLBookmark;
+@class MLKBarcodeWiFi;
+@class MLKBarcodeCalendarEvent;
+
 @interface BarcodeScanningPlugin ()
 @property (nonatomic, strong) MLKBarcodeScanner *scanner;
 @property (nonatomic, assign) BOOL detectInvertedBarcodes;
