@@ -12,6 +12,20 @@
 #import <MLKitVision/MLKitVision.h>
 #import <Photos/Photos.h>
 
+// Explicit imports for MLKit barcode types
+#import <MLKitBarcodeScanning/MLKBarcode.h>
+#import <MLKitBarcodeScanning/MLKBarcodeAddress.h>
+#import <MLKitBarcodeScanning/MLKBarcodeContactInfo.h>
+#import <MLKitBarcodeScanning/MLKBarcodeDriverLicense.h>
+#import <MLKitBarcodeScanning/MLKBarcodeEmail.h>
+#import <MLKitBarcodeScanning/MLKBarcodeGeoPoint.h>
+#import <MLKitBarcodeScanning/MLKBarcodePersonName.h>
+#import <MLKitBarcodeScanning/MLKBarcodePhone.h>
+#import <MLKitBarcodeScanning/MLKBarcodeSMS.h>
+#import <MLKitBarcodeScanning/MLKBarcodeURLBookmark.h>
+#import <MLKitBarcodeScanning/MLKBarcodeWiFi.h>
+#import <MLKitBarcodeScanning/MLKBarcodeCalendarEvent.h>
+
 @implementation StaticBarcodeScannerModule
 
 RCT_EXPORT_MODULE()

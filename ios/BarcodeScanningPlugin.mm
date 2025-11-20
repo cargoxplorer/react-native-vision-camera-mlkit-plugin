@@ -11,6 +11,20 @@
 #import <MLKitBarcodeScanning/MLKitBarcodeScanning.h>
 #import <MLKitVision/MLKitVision.h>
 
+// Explicit imports for MLKit barcode types
+#import <MLKitBarcodeScanning/MLKBarcode.h>
+#import <MLKitBarcodeScanning/MLKBarcodeAddress.h>
+#import <MLKitBarcodeScanning/MLKBarcodeContactInfo.h>
+#import <MLKitBarcodeScanning/MLKBarcodeDriverLicense.h>
+#import <MLKitBarcodeScanning/MLKBarcodeEmail.h>
+#import <MLKitBarcodeScanning/MLKBarcodeGeoPoint.h>
+#import <MLKitBarcodeScanning/MLKBarcodePersonName.h>
+#import <MLKitBarcodeScanning/MLKBarcodePhone.h>
+#import <MLKitBarcodeScanning/MLKBarcodeSMS.h>
+#import <MLKitBarcodeScanning/MLKBarcodeURLBookmark.h>
+#import <MLKitBarcodeScanning/MLKBarcodeWiFi.h>
+#import <MLKitBarcodeScanning/MLKBarcodeCalendarEvent.h>
+
 @interface BarcodeScanningPlugin ()
 @property (nonatomic, strong) MLKBarcodeScanner *scanner;
 @property (nonatomic, assign) BOOL detectInvertedBarcodes;

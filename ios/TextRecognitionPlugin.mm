@@ -15,6 +15,14 @@
 #import <MLKitTextRecognitionKorean/MLKitTextRecognitionKorean.h>
 #import <MLKitVision/MLKitVision.h>
 
+// Explicit imports for MLKit text types
+#import <MLKitTextRecognition/MLKText.h>
+#import <MLKitTextRecognition/MLKTextBlock.h>
+#import <MLKitTextRecognition/MLKTextLine.h>
+#import <MLKitTextRecognition/MLKTextElement.h>
+#import <MLKitTextRecognition/MLKTextSymbol.h>
+#import <MLKitTextRecognition/MLKTextRecognizedLanguage.h>
+
 @interface TextRecognitionPlugin ()
 @property (nonatomic, strong) MLKTextRecognizer *recognizer;
 @end
