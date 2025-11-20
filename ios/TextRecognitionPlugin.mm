@@ -8,12 +8,12 @@
 #import <React/RCTUtils.h>
 #import "react-native-vision-camera-ml-kit-Swift.h"
 
-@import MLKitTextRecognition;
-@import MLKitTextRecognitionChinese;
-@import MLKitTextRecognitionDevanagari;
-@import MLKitTextRecognitionJapanese;
-@import MLKitTextRecognitionKorean;
-@import MLKitVision;
+#import <MLKitTextRecognition/MLKitTextRecognition.h>
+#import <MLKitTextRecognitionChinese/MLKitTextRecognitionChinese.h>
+#import <MLKitTextRecognitionDevanagari/MLKitTextRecognitionDevanagari.h>
+#import <MLKitTextRecognitionJapanese/MLKitTextRecognitionJapanese.h>
+#import <MLKitTextRecognitionKorean/MLKitTextRecognitionKorean.h>
+#import <MLKitVision/MLKitVision.h>
 
 @interface TextRecognitionPlugin ()
 @property (nonatomic, strong) MLKTextRecognizer *recognizer;
