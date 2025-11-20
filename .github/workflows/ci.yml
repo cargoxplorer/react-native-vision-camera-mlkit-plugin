@@ -165,28 +165,41 @@ jobs:
       - name: Set iOS deployment target
         run: |
           cd example/ios
-          # Update all targets in the Xcode project to use iOS 15.5
-          echo "Fixing deployment targets in Xcode project..."
+
+          echo "=== BEFORE MODIFICATIONS ==="
+          echo "Podfile platform line:"
+          grep "platform :ios" Podfile || echo "No platform line found"
+          echo ""
+          echo "Deployment targets in Xcode project (first 3):"
+          grep "IPHONEOS_DEPLOYMENT_TARGET" *.xcodeproj/project.pbxproj | head -3
+
+          echo ""
+          echo "=== APPLYING FIXES ==="
+
+          # Fix Xcode project deployment target
+          echo "Updating Xcode project to iOS 15.5..."
           ruby -i -pe 'gsub(/IPHONEOS_DEPLOYMENT_TARGET = \d+\.\d+/, "IPHONEOS_DEPLOYMENT_TARGET = 15.5")' *.xcodeproj/project.pbxproj
 
-          # Also ensure Podfile has correct platform (must be exact match)
-          if [ -f "Podfile" ]; then
-            echo "Current Podfile platform line:"
-            grep "platform :ios" Podfile || echo "No platform line found"
-            echo "Updating Podfile platform to 15.5..."
-            # Force the platform to be exactly 15.5
-            sed -i.bak "s/platform :ios.*/platform :ios, '15.5'/" Podfile
-            echo "Updated Podfile platform line:"
-            grep "platform :ios" Podfile
-          fi
+          # Fix Podfile platform
+          echo "Updating Podfile platform to 15.5..."
+          sed -i.bak "s/platform :ios.*/platform :ios, '15.5'/" Podfile
 
-          # Verify deployment target in project
-          echo "Checking deployment targets in project.pbxproj:"
-          grep "IPHONEOS_DEPLOYMENT_TARGET" *.xcodeproj/project.pbxproj | head -5
+          echo ""
+          echo "=== AFTER MODIFICATIONS ==="
+          echo "Podfile platform line:"
+          grep "platform :ios" Podfile
+          echo ""
+          echo "Deployment targets in Xcode project (first 3):"
+          grep "IPHONEOS_DEPLOYMENT_TARGET" *.xcodeproj/project.pbxproj | head -3
+          echo ""
+          echo "Full Podfile content:"
+          cat Podfile
 
       - name: Install CocoaPods dependencies
         run: |
           cd example/ios
+          # Clear CocoaPods cache to ensure fresh resolution
+          pod repo update
           pod install
 
       - name: Build iOS app
