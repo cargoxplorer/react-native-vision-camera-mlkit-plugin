@@ -202,12 +202,19 @@ jobs:
           pod repo update
           pod install
 
+      - name: List available schemes
+        run: |
+          cd example/ios
+          echo "Available schemes in workspace:"
+          xcodebuild -list -workspace *.xcworkspace
+
       - name: Build iOS app
         run: |
           cd example/ios
+          # Use MLKitExample scheme (the workspace name)
           xcodebuild \
             -workspace *.xcworkspace \
-            -scheme reactnativevisioncameramlkitexample \
+            -scheme MLKitExample \
             -configuration Debug \
             -sdk iphonesimulator \
             -destination 'platform=iOS Simulator,name=iPhone 16,OS=latest' \
