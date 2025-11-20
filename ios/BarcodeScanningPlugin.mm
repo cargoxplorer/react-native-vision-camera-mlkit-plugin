@@ -8,9 +8,9 @@
 #import <React/RCTUtils.h>
 #import "react-native-vision-camera-ml-kit-Swift.h"
 
-// MLKit umbrella headers include all necessary types
-#import <MLKitBarcodeScanning/MLKitBarcodeScanning.h>
-#import <MLKitVision/MLKitVision.h>
+// Use @import for MLKit modules
+@import MLKitBarcodeScanning;
+@import MLKitVision;
 
 @interface BarcodeScanningPlugin ()
 @property (nonatomic, strong) MLKBarcodeScanner *scanner;
@@ -181,10 +181,10 @@
         case MLKBarcodeValueTypePhone: return @"phone";
         case MLKBarcodeValueTypeSMS: return @"sms";
         case MLKBarcodeValueTypeWiFi: return @"wifi";
-        case MLKBarcodeValueTypeGeo: return @"geo";
+        case MLKBarcodeValueTypeGeoPoint: return @"geo";
         case MLKBarcodeValueTypeContactInfo: return @"contact";
         case MLKBarcodeValueTypeCalendarEvent: return @"calendarEvent";
-        case MLKBarcodeValueTypeDriverLicense: return @"driverLicense";
+        case MLKBarcodeValueTypeDriversLicense: return @"driverLicense";
         default: return @"unknown";
     }
 }
@@ -258,7 +258,7 @@
                 }
                 break;
             }
-            case MLKBarcodeValueTypeGeo: {
+            case MLKBarcodeValueTypeGeoPoint: {
                 if (barcode.geoPoint) {
                     NSMutableDictionary *geoDict = [NSMutableDictionary dictionary];
                     geoDict[@"latitude"] = @(barcode.geoPoint.latitude);
@@ -341,7 +341,7 @@
                 }
                 break;
             }
-            case MLKBarcodeValueTypeDriverLicense: {
+            case MLKBarcodeValueTypeDriversLicense: {
                 if (barcode.driverLicense) {
                     NSMutableDictionary *licenseDict = [NSMutableDictionary dictionary];
                     licenseDict[@"documentType"] = barcode.driverLicense.documentType ?: @"";

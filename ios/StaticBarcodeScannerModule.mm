@@ -8,10 +8,10 @@
 #import <React/RCTUtils.h>
 #import "react-native-vision-camera-ml-kit-Swift.h"
 
-// MLKit umbrella headers include all necessary types
-#import <MLKitBarcodeScanning/MLKitBarcodeScanning.h>
-#import <MLKitVision/MLKitVision.h>
-#import <Photos/Photos.h>
+// Use @import for MLKit modules
+@import MLKitBarcodeScanning;
+@import MLKitVision;
+@import Photos;
 
 @implementation StaticBarcodeScannerModule
 
@@ -191,10 +191,10 @@ RCT_EXPORT_METHOD(scanBarcode:(NSDictionary *)options
         case MLKBarcodeValueTypePhone: return @"phone";
         case MLKBarcodeValueTypeSMS: return @"sms";
         case MLKBarcodeValueTypeWiFi: return @"wifi";
-        case MLKBarcodeValueTypeGeo: return @"geo";
+        case MLKBarcodeValueTypeGeoPoint: return @"geo";
         case MLKBarcodeValueTypeContactInfo: return @"contact";
         case MLKBarcodeValueTypeCalendarEvent: return @"calendarEvent";
-        case MLKBarcodeValueTypeDriverLicense: return @"driverLicense";
+        case MLKBarcodeValueTypeDriversLicense: return @"driverLicense";
         default: return @"unknown";
     }
 }

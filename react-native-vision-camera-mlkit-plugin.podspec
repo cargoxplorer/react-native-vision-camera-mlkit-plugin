@@ -40,6 +40,8 @@ Pod::Spec.new do |s|
   s.pod_target_xcconfig = {
     'DEFINES_MODULE' => 'YES',
     'SWIFT_OBJC_INTERFACE_HEADER_NAME' => 'react-native-vision-camera-ml-kit-Swift.h',
-    'SWIFT_VERSION' => '5.0'
+    'SWIFT_VERSION' => '5.0',
+    'CLANG_ENABLE_MODULES' => 'YES',
+    'CLANG_ENABLE_MODULE_IMPLEMENTATION' => 'YES'
   }
 end
