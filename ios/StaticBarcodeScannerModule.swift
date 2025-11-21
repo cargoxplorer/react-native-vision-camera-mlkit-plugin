@@ -359,19 +359,19 @@ class StaticBarcodeScannerModule: NSObject {
 
     private func processDriverLicense(_ license: BarcodeDriverLicense) -> [String: Any] {
         var dict: [String: Any] = [:]
-        dict["documentType"] = license.documentType ?? ""
         dict["firstName"] = license.firstName ?? ""
         dict["lastName"] = license.lastName ?? ""
+        dict["middleName"] = license.middleName ?? ""
         dict["gender"] = license.gender ?? ""
         dict["addressStreet"] = license.addressStreet ?? ""
         dict["addressCity"] = license.addressCity ?? ""
         dict["addressState"] = license.addressState ?? ""
         dict["addressZip"] = license.addressZip ?? ""
         dict["licenseNumber"] = license.licenseNumber ?? ""
-        dict["issueDate"] = license.issueDate ?? ""
-        dict["expiryDate"] = license.expiryDate ?? ""
+        dict["expirationDate"] = license.expirationDate ?? ""
         dict["birthDate"] = license.birthDate ?? ""
         dict["issuingCountry"] = license.issuingCountry ?? ""
+        dict["licenseType"] = license.licenseType ?? ""
         return dict
     }
 
