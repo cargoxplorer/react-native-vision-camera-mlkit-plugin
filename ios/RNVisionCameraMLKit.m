@@ -19,7 +19,7 @@
 @implementation RNVisionCameraMLKitBridge
 
 + (void)load {
-    [RNVisionCameraMLKitLoader load];
+    [RNVisionCameraMLKit registerPlugins];
 }
 
 @end

@@ -131,8 +131,7 @@ public class TextRecognitionPlugin: FrameProcessorPlugin {
             var elementDict: [String: Any] = [
                 "text": element.text,
                 "frame": processRect(element.frame),
-                "cornerPoints": processCornerPoints(element.cornerPoints),
-                "symbols": processSymbols(element.symbols)
+                "cornerPoints": processCornerPoints(element.cornerPoints)
             ]
 
             if let lang = element.recognizedLanguages.first?.languageCode {
@@ -140,22 +139,6 @@ public class TextRecognitionPlugin: FrameProcessorPlugin {
             }
 
             return elementDict
-        }
-    }
-
-    private func processSymbols(_ symbols: [TextSymbol]) -> [[String: Any]] {
-        return symbols.map { symbol in
-            var symbolDict: [String: Any] = [
-                "text": symbol.text,
-                "frame": processRect(symbol.frame),
-                "cornerPoints": processCornerPoints(symbol.cornerPoints)
-            ]
-
-            if let lang = symbol.recognizedLanguages.first?.languageCode {
-                symbolDict["recognizedLanguage"] = lang
-            }
-
-            return symbolDict
         }
     }
 

@@ -27,11 +27,3 @@ public class RNVisionCameraMLKit: NSObject {
     }
 }
 
-// Auto-registration on load
-@objc(RNVisionCameraMLKitLoader)
-public class RNVisionCameraMLKitLoader: NSObject {
-    @objc
-    public static func load() {
-        RNVisionCameraMLKit.registerPlugins()
-    }
-}
