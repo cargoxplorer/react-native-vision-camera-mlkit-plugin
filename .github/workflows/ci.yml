@@ -212,6 +212,7 @@ jobs:
         run: |
           cd example/ios
           # Use MLKitExample scheme (the workspace name)
+          # Build for arm64 only to avoid x86_64 architecture issues on Intel runners
           xcodebuild \
             -workspace *.xcworkspace \
             -scheme MLKitExample \
@@ -219,6 +220,9 @@ jobs:
             -sdk iphonesimulator \
             -destination 'platform=iOS Simulator,name=iPhone 16,OS=latest' \
             -derivedDataPath build \
+            -arch arm64 \
+            ONLY_ACTIVE_ARCH=NO \
+            EXCLUDED_ARCHS=x86_64 \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             build
