@@ -8,6 +8,7 @@
 #import <React/RCTUtils.h>
 #import "react-native-vision-camera-ml-kit-Swift.h"
 
+@import MLKitTextRecognitionCommon;
 @import MLKitTextRecognition;
 @import MLKitTextRecognitionChinese;
 @import MLKitTextRecognitionDevanagari;
