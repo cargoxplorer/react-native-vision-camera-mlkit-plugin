@@ -80,57 +80,57 @@ jobs:
           path: lib/
           retention-days: 1
 
-  # android-build:
-  #   runs-on: ubuntu-latest
-  #   name: Android Native Build
-  #
-  #   steps:
-  #     - name: Checkout repository
-  #       uses: actions/checkout@v4
-  #
-  #     - name: Setup Node.js
-  #       uses: actions/setup-node@v4
-  #       with:
-  #         node-version: '20'
-  #         cache: 'yarn'
-  #
-  #     - name: Setup Java
-  #       uses: actions/setup-java@v4
-  #       with:
-  #         distribution: 'zulu'
-  #         java-version: '17'
-  #
-  #     - name: Install root dependencies
-  #       run: yarn install
-  #
-  #     - name: Build TypeScript library
-  #       run: yarn prepare
-  #
-  #     - name: Install example app dependencies
-  #       run: |
-  #         cd example
-  #         yarn install
-  #
-  #     - name: Generate Android project (Expo prebuild)
-  #       run: |
-  #         cd example
-  #         npx expo prebuild --platform android --clean
-  #
-  #     - name: Make gradlew executable
-  #       run: chmod +x example/android/gradlew
-  #
-  #     - name: Build Android example app
-  #       run: |
-  #         cd example/android
-  #         ./gradlew assembleDebug --no-daemon
-  #
-  #     - name: Upload Android APK
-  #       uses: actions/upload-artifact@v4
-  #       with:
-  #         name: android-debug-apk
-  #         path: example/android/app/build/outputs/apk/debug/*.apk
-  #         retention-days: 7
-  #         if-no-files-found: error
+  android-build:
+    runs-on: ubuntu-latest
+    name: Android Native Build
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'yarn'
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'zulu'
+          java-version: '17'
+
+      - name: Install root dependencies
+        run: yarn install
+
+      - name: Build TypeScript library
+        run: yarn prepare
+
+      - name: Install example app dependencies
+        run: |
+          cd example
+          yarn install
+
+      - name: Generate Android project (Expo prebuild)
+        run: |
+          cd example
+          npx expo prebuild --platform android --clean
+
+      - name: Make gradlew executable
+        run: chmod +x example/android/gradlew
+
+      - name: Build Android example app
+        run: |
+          cd example/android
+          ./gradlew assembleDebug --no-daemon
+
+      - name: Upload Android APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-debug-apk
+          path: example/android/app/build/outputs/apk/debug/*.apk
+          retention-days: 7
+          if-no-files-found: error
 
   ios-build:
     runs-on: macos-15 # macOS 15 (Sequoia) with Xcode 16+
