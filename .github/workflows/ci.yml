@@ -212,17 +212,17 @@ jobs:
         run: |
           cd example/ios
           # Use MLKitExample scheme (the workspace name)
-          # Build for arm64 only to avoid x86_64 architecture issues on Intel runners
+          # Build for arm64 only (x86_64 excluded via Podfile post_install hook)
+          # Use first available simulator (should work on both Intel and Apple Silicon runners)
+          FIRST_SIM=$(xcrun simctl list devices available | grep -m 1 "iPhone" | sed -E 's/.*\(([A-F0-9-]+)\).*/\1/')
           xcodebuild \
             -workspace *.xcworkspace \
             -scheme MLKitExample \
             -configuration Debug \
             -sdk iphonesimulator \
-            -destination 'platform=iOS Simulator,name=iPhone 16,OS=latest' \
+            -destination "id=$FIRST_SIM" \
             -derivedDataPath build \
-            -arch arm64 \
             ONLY_ACTIVE_ARCH=NO \
-            EXCLUDED_ARCHS=x86_64 \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             build
