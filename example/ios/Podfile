@@ -57,11 +57,15 @@ target 'MLKitExample' do
       :ccache_enabled => ccache_enabled?(podfile_properties),
     )
 
-    # Fix architecture issues: build for arm64 simulator only
-    installer.pods_project.targets.each do |target|
-      target.build_configurations.each do |config|
-        # Exclude x86_64 from simulator builds to avoid architecture mismatches
-        config.build_settings['EXCLUDED_ARCHS[sdk=iphonesimulator*]'] = 'x86_64'
+    # Fix architecture issues for CI and local development
+    # On Apple Silicon (CI): exclude x86_64 to avoid architecture mismatches
+    # On Intel Macs (local): don't exclude anything to allow x86_64 builds
+    is_ci = ENV['CI'] == 'true'
+    if is_ci
+      installer.pods_project.targets.each do |target|
+        target.build_configurations.each do |config|
+          config.build_settings['EXCLUDED_ARCHS[sdk=iphonesimulator*]'] = 'x86_64'
+        end
       end
     end
   end
