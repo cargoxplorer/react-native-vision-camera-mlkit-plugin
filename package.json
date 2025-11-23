@@ -1,6 +1,6 @@
 {
   "name": "react-native-vision-camera-mlkit-plugin",
-  "version": "0.1.15",
+  "version": "0.1.16",
   "description": "React Native Vision Camera frame processor plugin for Google ML Kit (Text Recognition v2, Document Scanner, Barcode Scanning)",
   "main": "lib/commonjs/index",
   "module": "lib/module/index",
