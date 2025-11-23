@@ -77,9 +77,7 @@ export default function BarcodeScannerScreen() {
         const result = scanBarcode(frame);
         // Always notify JS, even when no barcodes were found, so UI can clear
         // old results and react to changes correctly.
-        if (result?.barcodes && result.barcodes.length > 0) {
-          onBarcodesDetected(result.barcodes);
-        }
+        onBarcodesDetected(result?.barcodes || []);
       });
     },
     [scanBarcode]

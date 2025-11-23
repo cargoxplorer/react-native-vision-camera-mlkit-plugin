@@ -29,6 +29,7 @@ import { useAppLifecycle } from './utils/useAppLifecycle';
 const VIN_LENGTH = 17;
 const BARCODE_CONFIRMATION_THRESHOLD = 3; // Need 3 matching barcode reads
 const OCR_CONFIRMATION_THRESHOLD = 3; // Need 3 matching OCR results to confirm
+const MATCH_EXPIRY_MS = 5000; // Remove matches not seen in last 5 seconds
 
 interface VINMatch {
   vin: string;
@@ -107,8 +108,16 @@ export default function VINScannerScreen() {
         if (!/[IOQ]/i.test(vin)) {
           setBarcodeMatches((prev) => {
             const newMatches = new Map(prev);
-            const match = newMatches.get(vin);
             const now = Date.now();
+
+            // Clean up stale entries
+            for (const [key, value] of newMatches.entries()) {
+              if (now - value.lastDetected > MATCH_EXPIRY_MS) {
+                newMatches.delete(key);
+              }
+            }
+
+            const match = newMatches.get(vin);
 
             if (match) {
               // Update existing match
@@ -150,8 +159,16 @@ export default function VINScannerScreen() {
       if (vin && vin.length === VIN_LENGTH) {
         setOcrMatches((prev) => {
           const newMatches = new Map(prev);
-          const match = newMatches.get(vin);
           const now = Date.now();
+
+          // Clean up stale entries
+          for (const [key, value] of newMatches.entries()) {
+            if (now - value.lastDetected > MATCH_EXPIRY_MS) {
+              newMatches.delete(key);
+            }
+          }
+
+          const match = newMatches.get(vin);
 
           if (match) {
             // Update existing match
@@ -171,7 +188,7 @@ export default function VINScannerScreen() {
 
           // Check if we've reached confirmation threshold
           const updated = newMatches.get(vin);
-          if (updated && updated.count >= CONFIRMATION_THRESHOLD) {
+          if (updated && updated.count >= OCR_CONFIRMATION_THRESHOLD) {
             setConfirmedVIN(vin);
           }
 
@@ -472,7 +489,7 @@ export default function VINScannerScreen() {
                 </View>
               )}
 
-              {!barcodeVIN && ocrMatches.size === 0 && (
+              {barcodeMatches.size === 0 && ocrMatches.size === 0 && (
                 <View style={styles.emptyState}>
                   <Text style={styles.emptyStateText}>
                     Position VIN in camera view
