@@ -13,6 +13,7 @@ import {
   useCameraFormat,
   useFrameProcessor,
   runAtTargetFps,
+  runAsync,
 } from 'react-native-vision-camera';
 import { Worklets } from 'react-native-worklets-core';
 import {
@@ -207,10 +208,18 @@ export default function VINScannerScreen() {
       if (scanMode !== 'ocr') {
         runAtTargetFps(3, () => {
           'worklet';
-          const result = scanBarcode(frame);
-          if (result?.barcodes && result.barcodes.length > 0) {
-            onBarcodesDetected(result.barcodes);
-          }
+          // Run async to prevent blocking the camera thread
+          runAsync(frame, () => {
+            'worklet';
+            try {
+              const result = scanBarcode(frame);
+              if (result?.barcodes && result.barcodes.length > 0) {
+                onBarcodesDetected(result.barcodes);
+              }
+            } catch (error) {
+              console.error('Barcode scanning error:', error);
+            }
+          });
         });
       }
 
@@ -218,8 +227,16 @@ export default function VINScannerScreen() {
       if (scanMode !== 'barcode') {
         runAtTargetFps(1, () => {
           'worklet';
-          const result = scanText(frame);
-          onTextDetected(result);
+          // Run async to prevent blocking the camera thread
+          runAsync(frame, () => {
+            'worklet';
+            try {
+              const result = scanText(frame);
+              onTextDetected(result);
+            } catch (error) {
+              console.error('Text recognition error:', error);
+            }
+          });
         });
       }
     },

@@ -21,6 +21,7 @@ import com.mrousavy.camera.frameprocessors.Frame
 import com.mrousavy.camera.frameprocessors.FrameProcessorPlugin
 import com.mrousavy.camera.frameprocessors.VisionCameraProxy
 import com.rnvisioncameramlkit.utils.Logger
+import java.util.concurrent.atomic.AtomicBoolean
 
 /**
  * Text Recognition v2 Frame Processor Plugin
@@ -34,6 +35,7 @@ class TextRecognitionPlugin(
 ) : FrameProcessorPlugin() {
 
     private var recognizer: TextRecognizer
+    private val isProcessing = AtomicBoolean(false)
 
     init {
         val language = options?.get("language")?.toString() ?: "latin"
@@ -56,6 +58,12 @@ class TextRecognitionPlugin(
     }
 
     override fun callback(frame: Frame, arguments: Map<String, Any>?): Any? {
+        // Skip frame if previous processing is still in progress
+        if (!isProcessing.compareAndSet(false, true)) {
+            Logger.debug("Skipping frame - previous processing still in progress")
+            return null
+        }
+
         val startTime = System.currentTimeMillis()
 
         try {
@@ -92,6 +100,8 @@ class TextRecognitionPlugin(
             Logger.error("Error during text recognition", e)
             Logger.performance("Text recognition processing (error)", processingTime)
             return null
+        } finally {
+            isProcessing.set(false)
         }
     }
 

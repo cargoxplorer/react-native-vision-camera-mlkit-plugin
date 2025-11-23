@@ -12,6 +12,7 @@ import {
   useCameraFormat,
   useFrameProcessor,
   runAtTargetFps,
+  runAsync,
 } from 'react-native-vision-camera';
 import { Worklets } from 'react-native-worklets-core';
 import {
@@ -74,10 +75,18 @@ export default function BarcodeScannerScreen() {
       // Throttle barcode scanning to avoid running on every frame
       runAtTargetFps(3, () => {
         'worklet';
-        const result = scanBarcode(frame);
-        // Always notify JS, even when no barcodes were found, so UI can clear
-        // old results and react to changes correctly.
-        onBarcodesDetected(result?.barcodes || []);
+        // Run async to prevent blocking the camera thread (scanning is expensive ~30-120ms)
+        runAsync(frame, () => {
+          'worklet';
+          try {
+            const result = scanBarcode(frame);
+            // Always notify JS, even when no barcodes were found, so UI can clear
+            // old results and react to changes correctly.
+            onBarcodesDetected(result?.barcodes || []);
+          } catch (error) {
+            console.error('Frame processing error:', error);
+          }
+        });
       });
     },
     [scanBarcode]

@@ -13,6 +13,8 @@ import MLKitBarcodeScanning
 public class BarcodeScanningPlugin: FrameProcessorPlugin {
 
     private var scanner: BarcodeScanner!
+    private let processingLock = NSLock()
+    private var isProcessing = false
     private var detectInvertedBarcodes: Bool = false
     private var tryRotations: Bool = true
 
@@ -68,7 +70,23 @@ public class BarcodeScanningPlugin: FrameProcessorPlugin {
     }
 
     public override func callback(_ frame: Frame, withArguments arguments: [AnyHashable: Any]?) -> Any? {
+        // Skip frame if previous processing is still in progress
+        processingLock.lock()
+        if isProcessing {
+            processingLock.unlock()
+            Logger.debug("Skipping frame - previous processing still in progress")
+            return nil
+        }
+        isProcessing = true
+        processingLock.unlock()
+
         let startTime = Date()
+
+        defer {
+            processingLock.lock()
+            isProcessing = false
+            processingLock.unlock()
+        }
 
         do {
             let buffer = frame.buffer

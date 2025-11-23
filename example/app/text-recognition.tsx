@@ -12,6 +12,7 @@ import {
   useCameraFormat,
   useFrameProcessor,
   runAtTargetFps,
+  runAsync,
 } from 'react-native-vision-camera';
 import { Worklets } from 'react-native-worklets-core';
 import {
@@ -65,8 +66,16 @@ export default function TextRecognitionScreen() {
       // Throttle OCR to avoid running on every single frame
       runAtTargetFps(1, () => {
         'worklet';
-        const textResult = scanText(frame);
-        onTextDetected(textResult);
+        // Run async to prevent blocking the camera thread (OCR is expensive ~50-150ms)
+        runAsync(frame, () => {
+          'worklet';
+          try {
+            const textResult = scanText(frame);
+            onTextDetected(textResult);
+          } catch (error) {
+            console.error('Frame processing error:', error);
+          }
+        });
       });
     },
     [scanText]
