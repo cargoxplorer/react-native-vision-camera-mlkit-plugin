@@ -95,13 +95,24 @@ public class BarcodeScanningPlugin: FrameProcessorPlugin {
             processingLock.unlock()
         }
 
+        // Safely capture frame data before it's released
+        guard let buffer = CMSampleBufferGetImageBuffer(frame.buffer) else {
+            Logger.error("Failed to get image buffer from frame")
+            return nil
+        }
+
+        // Lock the base address to prevent deallocation during processing
+        CVPixelBufferLockBaseAddress(buffer, .readOnly)
+        defer {
+            CVPixelBufferUnlockBaseAddress(buffer, .readOnly)
+        }
+
         do {
-            let buffer = frame.buffer
             let orientation = frame.orientation
 
             Logger.debug("Processing frame: \(frame.width)x\(frame.height), orientation: \(orientation.rawValue)")
 
-            let visionImage = VisionImage(buffer: buffer)
+            let visionImage = VisionImage(buffer: frame.buffer)
             visionImage.orientation = orientation
 
             let barcodes = try scanner.results(in: visionImage)
