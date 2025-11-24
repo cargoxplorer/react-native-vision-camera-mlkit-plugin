@@ -63,24 +63,17 @@ public class TextRecognitionPlugin: FrameProcessorPlugin {
         isProcessing = true
         processingLock.unlock()
 
+        // Use Vision Camera's reference counting to keep frame alive during processing
+        frame.incrementRefCount()
+
         let startTime = Date()
 
         defer {
+            // Release frame reference and reset processing flag
+            frame.decrementRefCount()
             processingLock.lock()
             isProcessing = false
             processingLock.unlock()
-        }
-
-        // Safely capture frame data before it's released
-        guard let buffer = CMSampleBufferGetImageBuffer(frame.buffer) else {
-            Logger.error("Failed to get image buffer from frame")
-            return nil
-        }
-
-        // Lock the base address to prevent deallocation during processing
-        CVPixelBufferLockBaseAddress(buffer, .readOnly)
-        defer {
-            CVPixelBufferUnlockBaseAddress(buffer, .readOnly)
         }
 
         do {
