@@ -20,6 +20,7 @@ import com.google.mlkit.vision.text.latin.TextRecognizerOptions
 import com.mrousavy.camera.frameprocessors.Frame
 import com.mrousavy.camera.frameprocessors.FrameProcessorPlugin
 import com.mrousavy.camera.frameprocessors.VisionCameraProxy
+import com.rnvisioncameramlkit.utils.ImageUtils
 import com.rnvisioncameramlkit.utils.Logger
 import java.util.concurrent.atomic.AtomicBoolean
 
@@ -66,6 +67,9 @@ class TextRecognitionPlugin(
      */
     override fun close() {
         try {
+            // Clear ImageUtils thread-local buffers
+            ImageUtils.clearBuffers()
+
             // Close ML Kit recognizer to release native resources
             recognizer.close()
             Logger.debug("Text recognizer resources cleaned up successfully")
@@ -87,34 +91,49 @@ class TextRecognitionPlugin(
 
         try {
             val mediaImage: Image = frame.image
-            val image = InputImage.fromMediaImage(
-                mediaImage,
-                frame.imageProxy.imageInfo.rotationDegrees
-            )
+            val rotationDegrees = frame.imageProxy.imageInfo.rotationDegrees
 
             if (Logger.isDebugEnabled()) {
-                Logger.debug("Processing frame: ${frame.width}x${frame.height}, rotation: ${frame.imageProxy.imageInfo.rotationDegrees}")
+                Logger.debug("Processing frame: ${frame.width}x${frame.height}, rotation: $rotationDegrees")
             }
 
-            val task: Task<Text> = recognizer.process(image)
-            val text: Text = Tasks.await(task)
-
-            val processingTime = System.currentTimeMillis() - startTime
-            Logger.performance("Text recognition processing", processingTime)
-
-            if (text.text.isEmpty()) {
-                Logger.debug("No text detected in frame")
+            // CRITICAL: Clone image to bitmap IMMEDIATELY to release the camera's Image buffer.
+            // This prevents "maxImages (6) has already been acquired" errors.
+            // The ImageReader has a limited buffer, and holding Image references during
+            // ML Kit processing causes the buffer to fill up and crash.
+            val clonedBitmap = ImageUtils.imageToBitmap(mediaImage, 0)  // Don't apply rotation yet
+            if (clonedBitmap == null) {
+                Logger.error("Failed to clone camera image to bitmap")
                 return null
             }
 
-            Logger.debug("Text detected: ${text.text.length} characters, ${text.textBlocks.size} blocks")
+            try {
+                // Use InputImage.fromBitmap with the cloned bitmap (not the original mediaImage)
+                val image = InputImage.fromBitmap(clonedBitmap, rotationDegrees)
 
-            val result = WritableNativeMap().apply {
-                putString("text", text.text)
-                putArray("blocks", processBlocks(text.textBlocks))
+                val task: Task<Text> = recognizer.process(image)
+                val text: Text = Tasks.await(task)
+
+                val processingTime = System.currentTimeMillis() - startTime
+                Logger.performance("Text recognition processing", processingTime)
+
+                if (text.text.isEmpty()) {
+                    Logger.debug("No text detected in frame")
+                    return null
+                }
+
+                Logger.debug("Text detected: ${text.text.length} characters, ${text.textBlocks.size} blocks")
+
+                val result = WritableNativeMap().apply {
+                    putString("text", text.text)
+                    putArray("blocks", processBlocks(text.textBlocks))
+                }
+
+                return result.toHashMap()
+            } finally {
+                // Always recycle the cloned bitmap to free memory
+                clonedBitmap.recycle()
             }
-
-            return result.toHashMap()
 
         } catch (e: Exception) {
             val processingTime = System.currentTimeMillis() - startTime

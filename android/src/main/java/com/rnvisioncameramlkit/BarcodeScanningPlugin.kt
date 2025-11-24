@@ -15,6 +15,7 @@ import com.google.mlkit.vision.common.InputImage
 import com.mrousavy.camera.frameprocessors.Frame
 import com.mrousavy.camera.frameprocessors.FrameProcessorPlugin
 import com.mrousavy.camera.frameprocessors.VisionCameraProxy
+import com.rnvisioncameramlkit.utils.ImageUtils
 import com.rnvisioncameramlkit.utils.Logger
 import java.util.concurrent.atomic.AtomicBoolean
 
@@ -109,6 +110,9 @@ class BarcodeScanningPlugin(
             invertedYBuffer = null
             rgbIntBuffer = null
 
+            // Clear ImageUtils thread-local buffers
+            ImageUtils.clearBuffers()
+
             // Close ML Kit scanner to release native resources
             scanner.close()
             Logger.debug("Barcode scanner resources cleaned up successfully")
@@ -136,6 +140,16 @@ class BarcodeScanningPlugin(
                 Logger.debug("Processing frame: ${frame.width}x${frame.height}, rotation: $baseRotation")
             }
 
+            // CRITICAL: Clone image to bitmap IMMEDIATELY to release the camera's Image buffer.
+            // This prevents "maxImages (6) has already been acquired" errors.
+            // The ImageReader has a limited buffer, and holding Image references during
+            // ML Kit processing causes the buffer to fill up and crash.
+            val clonedBitmap = ImageUtils.imageToBitmap(mediaImage, 0)  // Don't apply rotation yet
+            if (clonedBitmap == null) {
+                Logger.error("Failed to clone camera image to bitmap")
+                return null
+            }
+
             // Try scanning at current rotation and optionally 90 degree rotation
             val rotations = if (tryRotations) {
                 listOf(baseRotation, (baseRotation + 90) % 360)
@@ -144,89 +158,98 @@ class BarcodeScanningPlugin(
             }
             var barcodes: List<Barcode> = emptyList()
 
-            // 1. Try normal image at current rotation
-            val image = InputImage.fromMediaImage(mediaImage, rotations[0])
-            val task: Task<List<Barcode>> = scanner.process(image)
-            barcodes = Tasks.await(task)
+            try {
+                // 1. Try normal image at current rotation (using cloned bitmap)
+                val image = InputImage.fromBitmap(clonedBitmap, rotations[0])
+                val task: Task<List<Barcode>> = scanner.process(image)
+                barcodes = Tasks.await(task)
 
-            if (barcodes.isNotEmpty()) {
-                if (Logger.isDebugEnabled()) {
-                    Logger.debug("Found ${barcodes.size} barcode(s) at rotation ${rotations[0]}")
-                }
-            } else if (tryRotations && rotations.size > 1) {
-                // 2. Try normal image at 90 degree rotation (only if tryRotations is enabled)
-                if (Logger.isDebugEnabled()) {
-                    Logger.debug("No barcodes at rotation ${rotations[0]}, trying ${rotations[1]}")
-                }
-                val image90 = InputImage.fromMediaImage(mediaImage, rotations[1])
-                val task90: Task<List<Barcode>> = scanner.process(image90)
-                barcodes = Tasks.await(task90)
+                if (barcodes.isNotEmpty()) {
+                    if (Logger.isDebugEnabled()) {
+                        Logger.debug("Found ${barcodes.size} barcode(s) at rotation ${rotations[0]}")
+                    }
+                } else if (tryRotations && rotations.size > 1) {
+                    // 2. Try normal image at 90 degree rotation (only if tryRotations is enabled)
+                    if (Logger.isDebugEnabled()) {
+                        Logger.debug("No barcodes at rotation ${rotations[0]}, trying ${rotations[1]}")
+                    }
+                    val image90 = InputImage.fromBitmap(clonedBitmap, rotations[1])
+                    val task90: Task<List<Barcode>> = scanner.process(image90)
+                    barcodes = Tasks.await(task90)
 
-                if (barcodes.isNotEmpty() && Logger.isDebugEnabled()) {
-                    Logger.debug("Found ${barcodes.size} barcode(s) at rotation ${rotations[1]}")
-                }
-            }
-
-            // 3. If no barcodes found and inverted detection is enabled, try inverted images
-            if (barcodes.isEmpty() && detectInvertedBarcodes) {
-                if (Logger.isDebugEnabled()) {
-                    Logger.debug("No barcodes in normal image, attempting inverted image scan...")
-                }
-
-                val startInvertTime = System.currentTimeMillis()
-
-                // Create a single inverted Bitmap and reuse it for both rotations
-                val invertedBitmap = createInvertedBitmap(mediaImage)
-
-                if (invertedBitmap != null) {
-                    // Try inverted at current rotation
-                    val invertedImage = InputImage.fromBitmap(invertedBitmap, rotations[0])
-                    val invertedTask: Task<List<Barcode>> = scanner.process(invertedImage)
-                    barcodes = Tasks.await(invertedTask)
-
-                    if (barcodes.isNotEmpty()) {
-                        if (Logger.isDebugEnabled()) {
-                            Logger.debug("Found ${barcodes.size} barcode(s) in inverted image at rotation ${rotations[0]}")
-                        }
-                    } else if (tryRotations && rotations.size > 1) {
-                        // Try inverted at 90 degree rotation (only if tryRotations is enabled)
-                        if (Logger.isDebugEnabled()) {
-                            Logger.debug("No barcodes in inverted at ${rotations[0]}, trying ${rotations[1]}")
-                        }
-
-                        val invertedImage90 = InputImage.fromBitmap(invertedBitmap, rotations[1])
-                        val invertedTask90: Task<List<Barcode>> = scanner.process(invertedImage90)
-                        barcodes = Tasks.await(invertedTask90)
-
-                        if (barcodes.isNotEmpty() && Logger.isDebugEnabled()) {
-                            Logger.debug("Found ${barcodes.size} barcode(s) in inverted image at rotation ${rotations[1]}")
-                        }
+                    if (barcodes.isNotEmpty() && Logger.isDebugEnabled()) {
+                        Logger.debug("Found ${barcodes.size} barcode(s) at rotation ${rotations[1]}")
                     }
                 }
 
-                val invertTime = System.currentTimeMillis() - startInvertTime
-                Logger.performance("Inverted image scan", invertTime)
-            }
+                // 3. If no barcodes found and inverted detection is enabled, try inverted images
+                if (barcodes.isEmpty() && detectInvertedBarcodes) {
+                    if (Logger.isDebugEnabled()) {
+                        Logger.debug("No barcodes in normal image, attempting inverted image scan...")
+                    }
 
-            val processingTime = System.currentTimeMillis() - startTime
-            Logger.performance("Barcode scanning processing", processingTime)
+                    val startInvertTime = System.currentTimeMillis()
 
-            if (barcodes.isEmpty()) {
-                if (Logger.isDebugEnabled()) {
-                    Logger.debug("No barcodes detected in frame (tried all rotations)")
+                    // Create a single inverted Bitmap from the cloned bitmap (not the original mediaImage)
+                    val invertedBitmap = createInvertedBitmapFromBitmap(clonedBitmap)
+
+                    if (invertedBitmap != null) {
+                        try {
+                            // Try inverted at current rotation
+                            val invertedImage = InputImage.fromBitmap(invertedBitmap, rotations[0])
+                            val invertedTask: Task<List<Barcode>> = scanner.process(invertedImage)
+                            barcodes = Tasks.await(invertedTask)
+
+                            if (barcodes.isNotEmpty()) {
+                                if (Logger.isDebugEnabled()) {
+                                    Logger.debug("Found ${barcodes.size} barcode(s) in inverted image at rotation ${rotations[0]}")
+                                }
+                            } else if (tryRotations && rotations.size > 1) {
+                                // Try inverted at 90 degree rotation (only if tryRotations is enabled)
+                                if (Logger.isDebugEnabled()) {
+                                    Logger.debug("No barcodes in inverted at ${rotations[0]}, trying ${rotations[1]}")
+                                }
+
+                                val invertedImage90 = InputImage.fromBitmap(invertedBitmap, rotations[1])
+                                val invertedTask90: Task<List<Barcode>> = scanner.process(invertedImage90)
+                                barcodes = Tasks.await(invertedTask90)
+
+                                if (barcodes.isNotEmpty() && Logger.isDebugEnabled()) {
+                                    Logger.debug("Found ${barcodes.size} barcode(s) in inverted image at rotation ${rotations[1]}")
+                                }
+                            }
+                        } finally {
+                            invertedBitmap.recycle()
+                        }
+                    }
+
+                    val invertTime = System.currentTimeMillis() - startInvertTime
+                    Logger.performance("Inverted image scan", invertTime)
                 }
-                return null
-            }
 
-            if (Logger.isDebugEnabled()) {
-                Logger.debug("Barcodes detected: ${barcodes.size} barcode(s)")
-            }
+                val processingTime = System.currentTimeMillis() - startTime
+                Logger.performance("Barcode scanning processing", processingTime)
 
-            val result = WritableNativeMap().apply {
-                putArray("barcodes", processBarcodes(barcodes))
-            }
+                if (barcodes.isEmpty()) {
+                    if (Logger.isDebugEnabled()) {
+                        Logger.debug("No barcodes detected in frame (tried all rotations)")
+                    }
+                    return null
+                }
 
-            return result.toHashMap()
+                if (Logger.isDebugEnabled()) {
+                    Logger.debug("Barcodes detected: ${barcodes.size} barcode(s)")
+                }
+
+                val result = WritableNativeMap().apply {
+                    putArray("barcodes", processBarcodes(barcodes))
+                }
+
+                return result.toHashMap()
+            } finally {
+                // Always recycle the cloned bitmap to free memory
+                clonedBitmap.recycle()
+            }
 
         } catch (e: Exception) {
             val processingTime = System.currentTimeMillis() - startTime
@@ -239,8 +262,64 @@ class BarcodeScanningPlugin(
     }
 
     /**
+     * Create an inverted version of a Bitmap for detecting white-on-black barcodes.
+     * This method takes an already-cloned bitmap and inverts its pixel values.
+     *
+     * @param sourceBitmap The bitmap to invert (will NOT be modified or recycled)
+     * @return A new inverted bitmap, or null on failure
+     */
+    private fun createInvertedBitmapFromBitmap(sourceBitmap: android.graphics.Bitmap): android.graphics.Bitmap? {
+        return try {
+            val width = sourceBitmap.width
+            val height = sourceBitmap.height
+            val pixelCount = width * height
+
+            // Ensure reusable buffer is allocated
+            val requiredSize = pixelCount
+            if (rgbIntBuffer == null || rgbIntBuffer!!.size < requiredSize) {
+                rgbIntBuffer = IntArray(requiredSize)
+            }
+            val pixels = rgbIntBuffer!!
+
+            // Get all pixels from source bitmap
+            sourceBitmap.getPixels(pixels, 0, width, 0, 0, width, height)
+
+            // Invert each pixel (preserve alpha, invert RGB)
+            for (i in 0 until pixelCount) {
+                val pixel = pixels[i]
+                val alpha = pixel and 0xFF000000.toInt()
+                val r = (pixel shr 16) and 0xFF
+                val g = (pixel shr 8) and 0xFF
+                val b = pixel and 0xFF
+                // Invert RGB values
+                pixels[i] = alpha or ((255 - r) shl 16) or ((255 - g) shl 8) or (255 - b)
+            }
+
+            // Create new bitmap with inverted pixels
+            val invertedBitmap = android.graphics.Bitmap.createBitmap(
+                width,
+                height,
+                android.graphics.Bitmap.Config.ARGB_8888
+            )
+            invertedBitmap.setPixels(pixels, 0, width, 0, 0, width, height)
+
+            if (Logger.isDebugEnabled()) {
+                Logger.debug("Created inverted bitmap: ${width}x${height}")
+            }
+
+            invertedBitmap
+        } catch (e: Exception) {
+            Logger.error("Failed to create inverted bitmap from bitmap", e)
+            null
+        }
+    }
+
+    /**
      * Create an inverted version of the image for detecting white-on-black barcodes.
      * Inverts the Y plane pixels (for YUV_420_888 format) and converts to grayscale Bitmap.
+     *
+     * NOTE: This method is kept for backwards compatibility but is no longer used
+     * since we now clone images to bitmaps first. Use createInvertedBitmapFromBitmap instead.
      *
      * PERFORMANCE OPTIMIZATION:
      * - Uses grayscale (Y plane only) instead of full YUV→RGB conversion
@@ -258,6 +337,7 @@ class BarcodeScanningPlugin(
      * Performance: Uses reusable buffers stored on the plugin instance to avoid
      * per-frame allocations.
      */
+    @Suppress("unused")
     private fun createInvertedBitmap(mediaImage: Image): android.graphics.Bitmap? {
         return try {
             val width = mediaImage.width
