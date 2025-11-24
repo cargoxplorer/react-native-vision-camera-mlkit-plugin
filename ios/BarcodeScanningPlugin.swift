@@ -8,6 +8,8 @@ import VisionCamera
 import MLKitVision
 import MLKitCommon
 import MLKitBarcodeScanning
+import CoreImage
+import CoreMedia
 
 @objc(BarcodeScanningPlugin)
 public class BarcodeScanningPlugin: FrameProcessorPlugin {
@@ -17,6 +19,11 @@ public class BarcodeScanningPlugin: FrameProcessorPlugin {
     private var isProcessing = false
     private var detectInvertedBarcodes: Bool = false
     private var tryRotations: Bool = true
+    
+    // Reusable CIContext for image processing (expensive to create)
+    private lazy var ciContext: CIContext = {
+        return CIContext(options: [.useSoftwareRenderer: false])
+    }()
 
     public override init(proxy: VisionCameraProxyHolder, options: [AnyHashable: Any]! = [:]) {
         super.init(proxy: proxy, options: options)
@@ -26,12 +33,12 @@ public class BarcodeScanningPlugin: FrameProcessorPlugin {
         // Extract options
         detectInvertedBarcodes = options["detectInvertedBarcodes"] as? Bool ?? false
         if detectInvertedBarcodes {
-            Logger.warn("Inverted barcode detection may not be fully supported on iOS. This feature may be Android-only.")
+            Logger.warn("⚠️ Inverted barcode detection ENABLED - adds processing time per frame when no barcodes found. Only enable if you specifically need white-on-black barcodes.")
         }
 
         tryRotations = options["tryRotations"] as? Bool ?? true
         if !tryRotations {
-            Logger.info("90 degree rotation attempts DISABLED")
+            Logger.info("90 degree rotation attempts DISABLED - only using current camera rotation")
         }
 
         // Parse formats
@@ -81,7 +88,9 @@ public class BarcodeScanningPlugin: FrameProcessorPlugin {
         processingLock.lock()
         if isProcessing {
             processingLock.unlock()
-            Logger.debug("Skipping frame - previous processing still in progress")
+            if Logger.isDebugEnabled() {
+                Logger.debug("Skipping frame - previous processing still in progress")
+            }
             return nil
         }
         isProcessing = true
@@ -98,23 +107,90 @@ public class BarcodeScanningPlugin: FrameProcessorPlugin {
 
         do {
             let orientation = frame.orientation
+            let baseOrientation = getOrientation(orientation: orientation)
 
-            Logger.debug("Processing frame: \(frame.width)x\(frame.height), orientation: \(orientation.rawValue)")
+            if Logger.isDebugEnabled() {
+                Logger.debug("Processing frame: \(frame.width)x\(frame.height), orientation: \(orientation.rawValue)")
+            }
 
+            // Build list of orientations to try
+            let orientations: [UIImage.Orientation] = tryRotations
+                ? [baseOrientation, rotateOrientation90(baseOrientation)]
+                : [baseOrientation]
+
+            var barcodes: [Barcode] = []
+
+            // 1. Try normal image at current orientation
             let visionImage = VisionImage(buffer: frame.buffer)
-            visionImage.orientation = getOrientation(orientation: orientation)
+            visionImage.orientation = orientations[0]
+            barcodes = try scanner.results(in: visionImage)
 
-            let barcodes = try scanner.results(in: visionImage)
+            if !barcodes.isEmpty {
+                if Logger.isDebugEnabled() {
+                    Logger.debug("Found \(barcodes.count) barcode(s) at orientation \(orientations[0].rawValue)")
+                }
+            } else if tryRotations && orientations.count > 1 {
+                // 2. Try normal image at 90 degree rotation
+                if Logger.isDebugEnabled() {
+                    Logger.debug("No barcodes at orientation \(orientations[0].rawValue), trying \(orientations[1].rawValue)")
+                }
+                visionImage.orientation = orientations[1]
+                barcodes = try scanner.results(in: visionImage)
+
+                if !barcodes.isEmpty && Logger.isDebugEnabled() {
+                    Logger.debug("Found \(barcodes.count) barcode(s) at orientation \(orientations[1].rawValue)")
+                }
+            }
+
+            // 3. If no barcodes found and inverted detection is enabled, try inverted images
+            if barcodes.isEmpty && detectInvertedBarcodes {
+                if Logger.isDebugEnabled() {
+                    Logger.debug("No barcodes in normal image, attempting inverted image scan...")
+                }
+
+                let invertStartTime = Date()
+
+                if let invertedImage = createInvertedImage(from: frame.buffer) {
+                    // Try inverted at current orientation
+                    let invertedVisionImage = VisionImage(image: invertedImage)
+                    invertedVisionImage.orientation = orientations[0]
+                    barcodes = try scanner.results(in: invertedVisionImage)
+
+                    if !barcodes.isEmpty {
+                        if Logger.isDebugEnabled() {
+                            Logger.debug("Found \(barcodes.count) barcode(s) in inverted image at orientation \(orientations[0].rawValue)")
+                        }
+                    } else if tryRotations && orientations.count > 1 {
+                        // Try inverted at 90 degree rotation
+                        if Logger.isDebugEnabled() {
+                            Logger.debug("No barcodes in inverted at \(orientations[0].rawValue), trying \(orientations[1].rawValue)")
+                        }
+                        invertedVisionImage.orientation = orientations[1]
+                        barcodes = try scanner.results(in: invertedVisionImage)
+
+                        if !barcodes.isEmpty && Logger.isDebugEnabled() {
+                            Logger.debug("Found \(barcodes.count) barcode(s) in inverted image at orientation \(orientations[1].rawValue)")
+                        }
+                    }
+                }
+
+                let invertTime = Int64(Date().timeIntervalSince(invertStartTime) * 1000)
+                Logger.performance("Inverted image scan", durationMs: invertTime)
+            }
 
             let processingTime = Int64(Date().timeIntervalSince(startTime) * 1000)
             Logger.performance("Barcode scanning processing", durationMs: processingTime)
 
             if barcodes.isEmpty {
-                Logger.debug("No barcodes detected in frame")
+                if Logger.isDebugEnabled() {
+                    Logger.debug("No barcodes detected in frame (tried all orientations)")
+                }
                 return nil
             }
 
-            Logger.debug("Barcodes detected: \(barcodes.count) barcode(s)")
+            if Logger.isDebugEnabled() {
+                Logger.debug("Barcodes detected: \(barcodes.count) barcode(s)")
+            }
 
             let result: [String: Any] = ["barcodes": processBarcodes(barcodes)]
             return result
@@ -125,6 +201,53 @@ public class BarcodeScanningPlugin: FrameProcessorPlugin {
             Logger.performance("Barcode scanning processing (error)", durationMs: processingTime)
             return nil
         }
+    }
+    
+    // MARK: - Image Processing
+    
+    /// Rotate orientation by 90 degrees clockwise
+    private func rotateOrientation90(_ orientation: UIImage.Orientation) -> UIImage.Orientation {
+        switch orientation {
+        case .up: return .right
+        case .right: return .down
+        case .down: return .left
+        case .left: return .up
+        case .upMirrored: return .rightMirrored
+        case .rightMirrored: return .downMirrored
+        case .downMirrored: return .leftMirrored
+        case .leftMirrored: return .upMirrored
+        @unknown default: return .right
+        }
+    }
+    
+    /// Create an inverted (negative) version of the image for detecting white-on-black barcodes
+    private func createInvertedImage(from sampleBuffer: CMSampleBuffer) -> UIImage? {
+        guard let pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) else {
+            Logger.error("Failed to get pixel buffer from sample buffer")
+            return nil
+        }
+        
+        let ciImage = CIImage(cvPixelBuffer: pixelBuffer)
+        
+        // Apply color invert filter
+        guard let invertFilter = CIFilter(name: "CIColorInvert") else {
+            Logger.error("Failed to create CIColorInvert filter")
+            return nil
+        }
+        invertFilter.setValue(ciImage, forKey: kCIInputImageKey)
+        
+        guard let outputImage = invertFilter.outputImage else {
+            Logger.error("Failed to get output from invert filter")
+            return nil
+        }
+        
+        // Convert to CGImage then UIImage
+        guard let cgImage = ciContext.createCGImage(outputImage, from: outputImage.extent) else {
+            Logger.error("Failed to create CGImage from CIImage")
+            return nil
+        }
+        
+        return UIImage(cgImage: cgImage)
     }
 
     // MARK: - Orientation Mapping
