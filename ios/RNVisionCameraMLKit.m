@@ -2,13 +2,24 @@
 //  RNVisionCameraMLKit.m
 //  react-native-vision-camera-ml-kit
 //
-// This file exports the static native modules to React Native.
-// Frame Processor Plugins are registered in separate files:
-// - TextRecognitionPluginRegistration.m
-// - BarcodeScanningPluginRegistration.m
-//
 
 #import <Foundation/Foundation.h>
+#import <VisionCamera/FrameProcessorPlugin.h>
+#import <VisionCamera/FrameProcessorPluginRegistry.h>
+#import <VisionCamera/Frame.h>
+
+// Import the Swift header
+#if __has_include("react_native_vision_camera_mlkit_plugin/react_native_vision_camera_mlkit_plugin-Swift.h")
+#import "react_native_vision_camera_mlkit_plugin/react_native_vision_camera_mlkit_plugin-Swift.h"
+#else
+#import "react_native_vision_camera_mlkit_plugin-Swift.h"
+#endif
+
+// Register Swift Frame Processor Plugins using Vision Camera macros
+VISION_EXPORT_SWIFT_FRAME_PROCESSOR(TextRecognitionPlugin, scanTextV2)
+VISION_EXPORT_SWIFT_FRAME_PROCESSOR(BarcodeScanningPlugin, scanBarcode)
+
+// Export Static Modules to React Native
 #import <React/RCTBridgeModule.h>
 
 @interface RCT_EXTERN_MODULE(StaticTextRecognitionModule, NSObject)
