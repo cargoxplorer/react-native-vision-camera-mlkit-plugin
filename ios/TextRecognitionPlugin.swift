@@ -58,7 +58,7 @@ public class TextRecognitionPlugin: FrameProcessorPlugin {
         if isProcessing {
             processingLock.unlock()
             Logger.debug("Skipping frame - previous processing still in progress")
-            return [:]
+            return nil
         }
         isProcessing = true
         processingLock.unlock()
@@ -92,7 +92,7 @@ public class TextRecognitionPlugin: FrameProcessorPlugin {
 
             if text.text.isEmpty {
                 Logger.debug("No text detected in frame")
-                return [:]
+                return nil
             }
 
             Logger.debug("Text detected: \(text.text.count) characters, \(text.blocks.count) blocks")
@@ -106,7 +106,7 @@ public class TextRecognitionPlugin: FrameProcessorPlugin {
             let processingTime = Int64(Date().timeIntervalSince(startTime) * 1000)
             Logger.error("Error during text recognition: \(error.localizedDescription)")
             Logger.performance("Text recognition processing (error)", durationMs: processingTime)
-            return [:]
+            return nil
         }
     }
 

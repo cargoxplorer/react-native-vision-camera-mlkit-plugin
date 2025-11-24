@@ -82,7 +82,7 @@ public class BarcodeScanningPlugin: FrameProcessorPlugin {
         if isProcessing {
             processingLock.unlock()
             Logger.debug("Skipping frame - previous processing still in progress")
-            return [:]
+            return nil
         }
         isProcessing = true
         processingLock.unlock()
@@ -115,7 +115,7 @@ public class BarcodeScanningPlugin: FrameProcessorPlugin {
 
             if barcodes.isEmpty {
                 Logger.debug("No barcodes detected in frame")
-                return [:]
+                return nil
             }
 
             Logger.debug("Barcodes detected: \(barcodes.count) barcode(s)")
@@ -127,7 +127,7 @@ public class BarcodeScanningPlugin: FrameProcessorPlugin {
             let processingTime = Int64(Date().timeIntervalSince(startTime) * 1000)
             Logger.error("Exception during barcode scanning: \(error.localizedDescription)")
             Logger.performance("Barcode scanning processing (error)", durationMs: processingTime)
-            return [:]
+            return nil
         }
     }
 
