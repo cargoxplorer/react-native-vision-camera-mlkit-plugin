@@ -76,7 +76,7 @@ public class BarcodeScanningPlugin: FrameProcessorPlugin {
         return BarcodeScannerOptions(formats: combinedFormats)
     }
 
-    public override func callback(_ frame: Frame, withArguments arguments: [AnyHashable: Any]?) -> Any {
+    public override func callback(_ frame: Frame, withArguments arguments: [AnyHashable: Any]?) -> Any? {
         // Skip frame if previous processing is still in progress
         processingLock.lock()
         if isProcessing {

@@ -52,7 +52,7 @@ public class TextRecognitionPlugin: FrameProcessorPlugin {
         // Note: ML Kit resources are automatically freed by ARC when textRecognizer is deallocated
     }
 
-    public override func callback(_ frame: Frame, withArguments arguments: [AnyHashable: Any]?) -> Any {
+    public override func callback(_ frame: Frame, withArguments arguments: [AnyHashable: Any]?) -> Any? {
         // Skip frame if previous processing is still in progress
         processingLock.lock()
         if isProcessing {
