@@ -120,7 +120,9 @@ class BarcodeScanningPlugin(
     override fun callback(frame: Frame, arguments: Map<String, Any>?): Any? {
         // Skip frame if previous processing is still in progress
         if (!isProcessing.compareAndSet(false, true)) {
-            Logger.debug("Skipping frame - previous processing still in progress")
+            if (Logger.isDebugEnabled()) {
+                Logger.debug("Skipping frame - previous processing still in progress")
+            }
             return null
         }
 

@@ -77,7 +77,9 @@ class TextRecognitionPlugin(
     override fun callback(frame: Frame, arguments: Map<String, Any>?): Any? {
         // Skip frame if previous processing is still in progress
         if (!isProcessing.compareAndSet(false, true)) {
-            Logger.debug("Skipping frame - previous processing still in progress")
+            if (Logger.isDebugEnabled()) {
+                Logger.debug("Skipping frame - previous processing still in progress")
+            }
             return null
         }
 
@@ -90,7 +92,9 @@ class TextRecognitionPlugin(
                 frame.imageProxy.imageInfo.rotationDegrees
             )
 
-            Logger.debug("Processing frame: ${frame.width}x${frame.height}, rotation: ${frame.imageProxy.imageInfo.rotationDegrees}")
+            if (Logger.isDebugEnabled()) {
+                Logger.debug("Processing frame: ${frame.width}x${frame.height}, rotation: ${frame.imageProxy.imageInfo.rotationDegrees}")
+            }
 
             val task: Task<Text> = recognizer.process(image)
             val text: Text = Tasks.await(task)
