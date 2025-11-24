@@ -15,31 +15,9 @@
 #import "react_native_vision_camera_mlkit_plugin-Swift.h"
 #endif
 
-// Register TextRecognitionPlugin
-@interface TextRecognitionPlugin (FrameProcessorPluginLoader)
-@end
-
-@implementation TextRecognitionPlugin (FrameProcessorPluginLoader)
-+ (void)load {
-    [FrameProcessorPluginRegistry addFrameProcessorPlugin:@"scanTextV2"
-        withInitializer:^FrameProcessorPlugin*(VisionCameraProxyHolder* proxy, NSDictionary* options) {
-        return [[TextRecognitionPlugin alloc] initWithProxy:proxy withOptions:options];
-    }];
-}
-@end
-
-// Register BarcodeScanningPlugin
-@interface BarcodeScanningPlugin (FrameProcessorPluginLoader)
-@end
-
-@implementation BarcodeScanningPlugin (FrameProcessorPluginLoader)
-+ (void)load {
-    [FrameProcessorPluginRegistry addFrameProcessorPlugin:@"scanBarcode"
-        withInitializer:^FrameProcessorPlugin*(VisionCameraProxyHolder* proxy, NSDictionary* options) {
-        return [[BarcodeScanningPlugin alloc] initWithProxy:proxy withOptions:options];
-    }];
-}
-@end
+// Register Swift Frame Processor Plugins using Vision Camera macros
+VISION_EXPORT_SWIFT_FRAME_PROCESSOR(TextRecognitionPlugin, scanTextV2)
+VISION_EXPORT_SWIFT_FRAME_PROCESSOR(BarcodeScanningPlugin, scanBarcode)
 
 // Export Static Modules to React Native
 #import <React/RCTBridgeModule.h>
