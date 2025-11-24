@@ -25,6 +25,7 @@ import {
   type TextRecognitionResult,
 } from 'react-native-vision-camera-ml-kit';
 import { useAppLifecycle } from './utils/useAppLifecycle';
+import { extractVINFromText } from './utils/vinValidator';
 
 // VIN is 17 characters long
 const VIN_LENGTH = 17;
@@ -49,6 +50,7 @@ export default function VINScannerScreen() {
   );
   const [confirmedVIN, setConfirmedVIN] = useState<string | null>(null);
   const [scanMode, setScanMode] = useState<'all' | 'barcode' | 'ocr'>('all');
+  const [exposure, setExposure] = useState(0); // Range: -2.0 to 2.0
 
   const device = useCameraDevice('back');
   const format = useCameraFormat(
@@ -86,17 +88,6 @@ export default function VINScannerScreen() {
 
   // Handle app lifecycle
   useAppLifecycle(setIsActive);
-
-  // Extract VIN from text using regex
-  const extractVINFromText = (text: string): string | null => {
-    // VIN regex: 17 alphanumeric characters (no I, O, Q per standard)
-    const vinRegex = /[A-HJ-NPR-Z0-9]{17}/gi;
-    const matches = text.match(vinRegex);
-    if (matches && matches.length > 0) {
-      return matches[0].toUpperCase();
-    }
-    return null;
-  };
 
   // Process barcode results
   const onBarcodesDetected = Worklets.createRunOnJS((detected: Barcode[]) => {
@@ -298,6 +289,7 @@ export default function VINScannerScreen() {
           photoHdr={format?.supportsPhotoHdr ?? false}
           frameProcessor={combinedFrameProcessor}
           pixelFormat="yuv"
+          exposure={exposure}
         />
 
         {/* Overlay with status */}
@@ -399,6 +391,40 @@ export default function VINScannerScreen() {
             OCR Only
           </Text>
         </TouchableOpacity>
+      </View>
+
+      {/* Exposure Controls */}
+      <View style={styles.exposureContainer}>
+        <View style={styles.exposureControls}>
+          <TouchableOpacity
+            style={styles.exposureButton}
+            onPress={() => setExposure(Math.max(-2.0, exposure - 0.5))}
+          >
+            <Text style={styles.exposureButtonText}>−</Text>
+          </TouchableOpacity>
+
+          <View style={styles.exposureDisplay}>
+            <Text style={styles.exposureLabel}>Exposure</Text>
+            <Text style={styles.exposureValue}>
+              {exposure >= 0 ? '+' : ''}
+              {exposure.toFixed(1)}
+            </Text>
+          </View>
+
+          <TouchableOpacity
+            style={styles.exposureButton}
+            onPress={() => setExposure(Math.min(2.0, exposure + 0.5))}
+          >
+            <Text style={styles.exposureButtonText}>+</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.resetButtonStyle}
+            onPress={() => setExposure(0)}
+          >
+            <Text style={styles.exposureButtonText}>Reset</Text>
+          </TouchableOpacity>
+        </View>
       </View>
 
       {/* Results */}
@@ -632,6 +658,55 @@ const styles = StyleSheet.create({
   },
   modeButtonTextActive: {
     color: '#fff',
+  },
+  exposureContainer: {
+    backgroundColor: '#1a1a1a',
+    borderTopWidth: 1,
+    borderTopColor: '#333',
+    padding: 12,
+  },
+  exposureControls: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+  },
+  exposureButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 8,
+    backgroundColor: '#2196F3',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  exposureButtonText: {
+    color: '#fff',
+    fontSize: 18,
+    fontWeight: '600',
+  },
+  exposureDisplay: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  exposureLabel: {
+    color: '#aaa',
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  exposureValue: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: 'bold',
+    marginTop: 2,
+  },
+  resetButtonStyle: {
+    width: 'auto',
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    backgroundColor: '#2196F3',
+    alignItems: 'center',
+    justifyContent: 'center',
+    height: 40,
   },
   results: {
     flex: 1,

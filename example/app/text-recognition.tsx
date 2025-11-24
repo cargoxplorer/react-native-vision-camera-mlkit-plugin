@@ -31,10 +31,10 @@ export default function TextRecognitionScreen() {
   const [isActive, setIsActive] = useState(true);
 
   const device = useCameraDevice('back');
-  const format = useCameraFormat(
-    device,
-    React.useMemo(() => [{ photoHdr: true }, { videoHdr: true }], [])
-  );
+  const format = useCameraFormat(device, [
+    { videoResolution: { width: 1280, height: 720 } },
+    { fps: 60 },
+  ]);
   // Memoize options so the plugin isn't recreated on every render
   const textOptions = React.useMemo(() => ({ language }), [language]);
   const { scanText } = useTextRecognition(textOptions);
