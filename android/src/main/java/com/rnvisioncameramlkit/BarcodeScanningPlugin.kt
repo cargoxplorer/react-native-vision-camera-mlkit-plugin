@@ -249,12 +249,6 @@ class BarcodeScanningPlugin(
             Logger.performance("Barcode scanning processing (error)", processingTime)
             return null
         } finally {
-            try {
-                frame.imageProxy.close()
-                Logger.debug("Frame imageProxy closed successfully")
-            } catch (e: Exception) {
-                Logger.debug("Frame imageProxy already closed or invalid: ${e.message}")
-            }
             isProcessing.set(false)
         }
     }
