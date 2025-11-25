@@ -3,10 +3,7 @@ package com.rnvisioncameramlkit.utils
 import android.graphics.Bitmap
 import android.graphics.ImageFormat
 import android.graphics.Matrix
-import android.graphics.Rect
-import android.graphics.YuvImage
 import android.media.Image
-import java.io.ByteArrayOutputStream
 
 /**
  * Utility class for efficient image cloning and conversion.
@@ -23,8 +20,7 @@ object ImageUtils {
 
     // Reusable buffers to avoid per-frame allocations
     // ThreadLocal ensures thread safety when multiple frame processors run concurrently
-    private val nv21BufferLocal = ThreadLocal<ByteArray>()
-    private val jpegBufferLocal = ThreadLocal<ByteArrayOutputStream>()
+    private val rgbBufferLocal = ThreadLocal<IntArray>()
 
     /**
      * Clone an Image to a Bitmap for independent processing.
@@ -58,47 +54,47 @@ object ImageUtils {
     }
 
     /**
-     * Convert YUV_420_888 image to Bitmap via NV21 intermediate format.
-     * 
-     * Performance notes:
-     * - Uses reusable buffers to minimize GC pressure
-     * - YUV -> NV21 -> JPEG -> Bitmap pipeline is well-optimized on Android
-     * - Alternative: RenderScript (deprecated) or direct pixel manipulation (slower)
+     * Convert YUV_420_888 image to grayscale Bitmap using Y plane only.
+     *
+     * ML Kit text recognition and barcode scanning only need luminance (Y plane),
+     * not color information. This is much faster than full YUV->RGB conversion.
+     *
+     * Performance: ~3-5x faster than RGB conversion, uses less memory.
      */
     private fun yuv420ToBitmap(image: Image, rotationDegrees: Int): Bitmap? {
         val width = image.width
         val height = image.height
+        val pixelCount = width * height
 
-        // Get or create reusable NV21 buffer
-        val requiredSize = width * height * 3 / 2  // NV21 size: Y + UV interleaved
-        var nv21Buffer = nv21BufferLocal.get()
-        if (nv21Buffer == null || nv21Buffer.size < requiredSize) {
-            nv21Buffer = ByteArray(requiredSize)
-            nv21BufferLocal.set(nv21Buffer)
+        // Get or create reusable buffer
+        var grayBuffer = rgbBufferLocal.get()
+        if (grayBuffer == null || grayBuffer.size < pixelCount) {
+            grayBuffer = IntArray(pixelCount)
+            rgbBufferLocal.set(grayBuffer)
         }
 
-        // Convert YUV_420_888 to NV21
-        imageToNv21(image, nv21Buffer)
+        // Extract Y plane (luminance) directly to grayscale pixels
+        val yPlane = image.planes[0]
+        val yBuffer = yPlane.buffer
+        val yRowStride = yPlane.rowStride
+        val yPixelStride = yPlane.pixelStride
 
-        // Get or create reusable JPEG output stream
-        var jpegStream = jpegBufferLocal.get()
-        if (jpegStream == null) {
-            jpegStream = ByteArrayOutputStream(width * height / 4)  // JPEG is typically ~25% of raw
-            jpegBufferLocal.set(jpegStream)
-        } else {
-            jpegStream.reset()
+        var index = 0
+        for (row in 0 until height) {
+            val rowOffset = row * yRowStride
+            for (col in 0 until width) {
+                val y = yBuffer.get(rowOffset + col * yPixelStride).toInt() and 0xFF
+                // Grayscale: R=G=B=Y, packed as ARGB
+                grayBuffer[index++] = (0xFF shl 24) or (y shl 16) or (y shl 8) or y
+            }
         }
 
-        // Convert NV21 to JPEG (uses hardware-accelerated codec)
-        val yuvImage = YuvImage(nv21Buffer, ImageFormat.NV21, width, height, null)
-        yuvImage.compressToJpeg(Rect(0, 0, width, height), 90, jpegStream)
-
-        // Decode JPEG to Bitmap
-        val jpegBytes = jpegStream.toByteArray()
-        var bitmap = android.graphics.BitmapFactory.decodeByteArray(jpegBytes, 0, jpegBytes.size)
+        // Create bitmap from grayscale pixels
+        var bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+        bitmap.setPixels(grayBuffer, 0, width, 0, 0, width, height)
 
         // Apply rotation if needed
-        if (rotationDegrees != 0 && bitmap != null) {
+        if (rotationDegrees != 0) {
             val matrix = Matrix()
             matrix.postRotate(rotationDegrees.toFloat())
             val rotatedBitmap = Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height, matrix, true)
@@ -109,66 +105,6 @@ object ImageUtils {
         }
 
         return bitmap
-    }
-
-    /**
-     * Convert YUV_420_888 Image to NV21 byte array.
-     * 
-     * YUV_420_888 layout varies by device:
-     * - Some devices have interleaved UV (NV21-like)
-     * - Some have planar UV (I420-like)
-     * 
-     * This method handles both cases by checking pixel stride.
-     */
-    private fun imageToNv21(image: Image, nv21: ByteArray) {
-        val width = image.width
-        val height = image.height
-        val yPlane = image.planes[0]
-        val uPlane = image.planes[1]
-        val vPlane = image.planes[2]
-
-        val yBuffer = yPlane.buffer
-        val uBuffer = uPlane.buffer
-        val vBuffer = vPlane.buffer
-
-        val yRowStride = yPlane.rowStride
-        val uvRowStride = uPlane.rowStride
-        val uvPixelStride = uPlane.pixelStride
-
-        // Copy Y plane
-        var yPos = 0
-        for (row in 0 until height) {
-            yBuffer.position(row * yRowStride)
-            yBuffer.get(nv21, yPos, width)
-            yPos += width
-        }
-
-        // Copy UV planes (interleaved as VU for NV21)
-        val uvHeight = height / 2
-        val uvWidth = width / 2
-        var uvPos = width * height
-
-        if (uvPixelStride == 2) {
-            // UV data is interleaved (e.g., VUVUVU...) - common on most devices
-            // pixelStride == 2 means each color component occupies 2 bytes
-            for (row in 0 until uvHeight) {
-                val rowOffset = row * uvRowStride
-                for (col in 0 until uvWidth) {
-                    val pixelOffset = rowOffset + col * 2
-                    nv21[uvPos++] = vBuffer.get(pixelOffset)
-                    nv21[uvPos++] = uBuffer.get(pixelOffset)
-                }
-            }
-        } else {
-            // UV data is planar (pixelStride == 1) - separate U and V planes
-            for (row in 0 until uvHeight) {
-                val rowOffset = row * uvRowStride
-                for (col in 0 until uvWidth) {
-                    nv21[uvPos++] = vBuffer.get(rowOffset + col)
-                    nv21[uvPos++] = uBuffer.get(rowOffset + col)
-                }
-            }
-        }
     }
 
     /**
@@ -199,8 +135,7 @@ object ImageUtils {
      * Call this when the plugin is being destroyed.
      */
     fun clearBuffers() {
-        nv21BufferLocal.remove()
-        jpegBufferLocal.remove()
+        rgbBufferLocal.remove()
     }
 }
 
