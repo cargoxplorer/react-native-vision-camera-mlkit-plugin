@@ -27,9 +27,6 @@ public class ImageUtils: NSObject {
         return CIContext(options: [.useSoftwareRenderer: false])
     }()
 
-    /// Lock for thread-safe CIContext access
-    private static let contextLock = NSLock()
-
     /// Clone a CMSampleBuffer to a UIImage for independent processing.
     ///
     /// This method extracts pixel data from the camera buffer and creates a new UIImage.
@@ -68,10 +65,7 @@ public class ImageUtils: NSObject {
                 }
             }
 
-            // Convert CIImage to CGImage using the shared context (with thread safety)
-            contextLock.lock()
-            defer { contextLock.unlock() }
-
+            // Convert CIImage to CGImage using the shared context
             guard let cgImage = ciContext.createCGImage(image, from: image.extent) else {
                 Logger.error("Failed to create CGImage from CIImage")
                 return nil
