@@ -136,9 +136,6 @@ public class ImageUtils: NSObject {
     /// - Parameter ciImage: The CIImage to convert
     /// - Returns: A UIImage, or nil on failure
     @objc public static func uiImageFromCIImage(_ ciImage: CIImage) -> UIImage? {
-        contextLock.lock()
-        defer { contextLock.unlock() }
-
         guard let cgImage = ciContext.createCGImage(ciImage, from: ciImage.extent) else {
             Logger.error("Failed to create CGImage from CIImage for UIImage conversion")
             return nil
