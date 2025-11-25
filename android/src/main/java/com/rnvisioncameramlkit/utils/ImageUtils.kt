@@ -47,7 +47,12 @@ object ImageUtils {
                 }
             }
         } catch (e: Exception) {
-            Logger.error("Failed to convert image to bitmap", e)
+            val formatDetails = if (image.format == ImageFormat.YUV_420_888) {
+                "pixelStride=${image.planes[1].pixelStride}, rowStride=${image.planes[1].rowStride}"
+            } else {
+                ""
+            }
+            Logger.error("Failed to convert image to bitmap (format=${image.format} ${formatDetails})", e)
             null
         }
     }
@@ -144,28 +149,23 @@ object ImageUtils {
         var uvPos = width * height
 
         if (uvPixelStride == 2) {
-            // UV data is already interleaved (common case on many devices)
-            // Just need to copy V then U alternating
+            // UV data is interleaved (e.g., VUVUVU...) - common on most devices
+            // pixelStride == 2 means each color component occupies 2 bytes
             for (row in 0 until uvHeight) {
-                vBuffer.position(row * uvRowStride)
-                uBuffer.position(row * uvRowStride)
+                val rowOffset = row * uvRowStride
                 for (col in 0 until uvWidth) {
-                    nv21[uvPos++] = vBuffer.get()
-                    nv21[uvPos++] = uBuffer.get()
-                    if (col < uvWidth - 1) {
-                        vBuffer.position(vBuffer.position() + 1)
-                        uBuffer.position(uBuffer.position() + 1)
-                    }
+                    val pixelOffset = rowOffset + col * 2
+                    nv21[uvPos++] = vBuffer.get(pixelOffset)
+                    nv21[uvPos++] = uBuffer.get(pixelOffset)
                 }
             }
         } else {
-            // UV data is planar (pixelStride == 1)
+            // UV data is planar (pixelStride == 1) - separate U and V planes
             for (row in 0 until uvHeight) {
-                val vRowStart = row * uvRowStride
-                val uRowStart = row * uvRowStride
+                val rowOffset = row * uvRowStride
                 for (col in 0 until uvWidth) {
-                    nv21[uvPos++] = vBuffer.get(vRowStart + col)
-                    nv21[uvPos++] = uBuffer.get(uRowStart + col)
+                    nv21[uvPos++] = vBuffer.get(rowOffset + col)
+                    nv21[uvPos++] = uBuffer.get(rowOffset + col)
                 }
             }
         }
