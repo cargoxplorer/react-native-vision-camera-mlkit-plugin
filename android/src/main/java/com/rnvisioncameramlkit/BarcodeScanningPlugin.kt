@@ -131,17 +131,11 @@ class BarcodeScanningPlugin(
                 Logger.debug("Processing frame: ${frame.width}x${frame.height}, rotation: $baseRotation")
             }
 
-            // CRITICAL: Clone image to bitmap IMMEDIATELY to release the camera's Image buffer.
-            // This prevents "maxImages (6) has already been acquired" errors.
-            // The ImageReader has a limited buffer, and holding Image references during
-            // ML Kit processing causes the buffer to fill up and crash.
+            // Clone image to bitmap to work with a stable copy during ML Kit processing.
+            // Note: We do NOT close imageProxy here - Vision Camera's frame processor pipeline
+            // manages frame lifecycle via withFrameRefCounting. Closing it here breaks
+            // multi-detector scenarios where multiple plugins process the same frame.
             val clonedBitmap = ImageUtils.imageToBitmap(mediaImage, 0)  // Don't apply rotation yet
-
-            // CRITICAL: Close the ImageProxy immediately after cloning to release the ImageReader slot.
-            // This allows the camera to continue capturing frames while we process asynchronously.
-            // The Frame object stays alive (for VisionCamera's ref counting), but the underlying
-            // image buffer is released back to the camera.
-            imageProxy.close()
 
             if (clonedBitmap == null) {
                 Logger.error("Failed to clone camera image to bitmap")
